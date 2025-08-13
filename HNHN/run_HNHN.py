@@ -14,6 +14,7 @@ import random
 import matplotlib.pyplot as plt
 import utils
 from collections import defaultdict
+import pandas as pd
 # 修正导入错误，使用文件中定义的Hypergraph类
 # from hypergraph import Hypergraph
 # 注意：Hypergraph类已在当前文件中定义，无需从外部导入
@@ -440,9 +441,16 @@ def start_trail(dataset_name, args):
         # print(acc_list)
     # 保存结果到公共result文件夹
     # 保存结果为：项目名+数据集名
-    result_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'result', 'HNHN_' + dataset_name + '.mat'))
+    result_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'result', 'HNHN_' + dataset_name + '.csv'))
     # 保存所有参数和结果到result文件夹
-    scio.savemat(result_path, {'acc': acc_list.reshape((1, 1000)), 'm_acc': m_acc})
+    # 创建DataFrame
+    df = pd.DataFrame({
+        'trial': range(1, len(acc_list) + 1),
+        'accuracy': acc_list.flatten(),
+        'mean_accuracy': [m_acc] * len(acc_list)
+    })
+    # 保存到CSV文件
+    df.to_csv(result_path, index=False)
     print(f'HNHN_{dataset_name} 平均准确率: {m_acc:.4f}')
     # print(acc_list)
 
