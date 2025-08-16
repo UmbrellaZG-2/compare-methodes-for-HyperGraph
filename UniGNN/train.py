@@ -47,7 +47,7 @@ G = H_to_G(h)
 train_idx  = torch.LongTensor(train_idx_list.astype(np.int64)).cuda()
 test_idx = torch.LongTensor(test_index_list.astype(np.int64)).cuda()
 print("数据加载完成!")
-Y = torch.LongTensor(np.where(labels)[1]).cuda()
+Y = torch.LongTensor(np.where(labels)[1].astype(np.int64)).cuda()
 X = torch.from_numpy(X.toarray()).float().cuda()
 lst = ['trial', 'test_acc']
 result_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "result"))
@@ -67,8 +67,8 @@ for run in range(1):
     run_dir.mkdir(parents=True, exist_ok=True)
 
     args.split = run
-    train_idx = train_idx_list[run]
-    test_idx = test_index_list[run]
+    train_idx = train_idx[run]
+    test_idx = test_idx[run]
 
 
     model, optimizer = initialise(X, Y, G, args)
@@ -79,11 +79,6 @@ for run in range(1):
     print(f'total_params:{sum(p.numel() for p in model.parameters() if p.requires_grad)}')
 
     tic_run = time.time()
-    from collections import Counter
-    counter = Counter(Y[train_idx].tolist())
-    print(counter)
-    label_rate = len(train_idx) / X.shape[0]
-    print(f'label rate: {label_rate}')
 
     best_test_acc, test_acc, Z = 0, 0, None    
     for epoch in range(args.epochs):

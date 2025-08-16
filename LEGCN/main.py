@@ -59,7 +59,7 @@ def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimize
     tic = time.time()
     model.train()
     optimizer.zero_grad()
-    output = model(features, adj, PvT)
+    output,x = model(features, adj, PvT)
 
     # 确保索引是整数类型
     idx_train = idx_train.to(torch.long)
@@ -80,7 +80,7 @@ def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimize
         # Evaluate validation set performance separately,
         # deactivates dropout during validation run.
         model.eval()
-        output = model(features, adj, PvT)
+        output,x = model(features, adj, PvT)
     loss_val = F.nll_loss(output[idx_val], labels[idx_val])
 
     acc_val = accuracy(output[idx_val], labels[idx_val])
@@ -131,20 +131,6 @@ def process_dataset(dataset_path):
     # 加载数据
     device = torch.device("cuda" if args.gpu >= 0 else "cpu")
     H, Y, X, labels, idx_train, idx_val, idx_test = load_data(dataset_name)
-
-    # 正确转换标签格式
-    if isinstance(labels, np.ndarray) and labels.ndim == 2:
-        # 如果标签是二维数组（one-hot编码）
-        labels = np.argmax(labels, axis=1)  # 转换为类别索引
-    elif isinstance(labels, np.ndarray) and labels.ndim == 1:
-        # 如果已经是一维类别索引
-        pass  # 无需转换
-    else:
-        # 处理其他格式（如稀疏矩阵）
-        labels = np.array(labels.todense()).argmax(axis=1)
-
-    # 确保标签是1D int数组
-    labels = labels.astype(np.int64)
     print(f"转换后标签形状: {labels.shape}, 类别数: {np.unique(labels).size}")
 
     pairs = hypergraph_to_pairs(H)
@@ -157,7 +143,7 @@ def process_dataset(dataset_path):
 
     # 创建PyTorch张量
     features = torch.FloatTensor(np.array(Pv @ X.todense())).to(device)
-    labels = torch.LongTensor(labels).to(device)
+    labels = torch.LongTensor(np.where(labels)[1]).to(device)
     PvT = sparse_mx_to_torch_sparse_tensor(PvT).to(device)
 
     # 正确分配索引集 - 确保是一维整数张量
