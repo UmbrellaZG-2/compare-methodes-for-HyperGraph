@@ -1,6 +1,3 @@
-'''
-Processing data
-'''
 import torch
 import numpy as np
 import os
@@ -15,11 +12,6 @@ import pdb
 
 
 def process_citeseer(args):
-    '''
-    citeseer.content of form <paper_id> <word_attributes>+ <class_label>
-    citeseer.cites of form <id of cited paper> <id of citing paper>
-    paper_citing, cited papers are hypernodes, citing papers are hyperedges.
-    '''
     content_path = 'data/citeseer/citeseer.content'
     cites_path = 'data/citeseer/citeseer.cites'
     paper2citing = defaultdict(set)
@@ -29,8 +21,6 @@ def process_citeseer(args):
         for line in lines:
             line = line.strip().split('\t')
             try:
-                # paper2citing[int(line[0])].add(int(line[1]))
-                # citing2paper[int(line[1])].add(int(line[0]))
                 paper2citing[line[0]].add(line[1])
                 citing2paper[line[1]].add(line[0])
             except ValueError as e:
@@ -45,11 +35,8 @@ def process_citeseer(args):
     citingwt = torch.zeros(len(paper2citing))
     n_paper = 0
     for citing, papers in citing2paper.items():
-        # pdb.set_trace()
-        # remove papers that are only cited by one paper
         if len(papers) == 1:
             continue
-        # pdb.set_trace()
         citing_idx = id2citing_idx[citing] if citing in id2citing_idx else len(id2citing_idx)
         id2citing_idx[citing] = citing_idx
         for paper in papers:
@@ -87,14 +74,13 @@ def process_citeseer(args):
                 citing_X[idx] = x
                 citing_classes[idx] = line[-1]
             else:
-                # count skips
                 n_skips += 1
 
         print('number of papers skipped {}'.format(n_skips))
         print('paper idx set {}'.format(len(paper_idx_set)))
 
     feat_dim = X.shape[-1]
-    do_svd = args.do_svd  # False
+    do_svd = args.do_svd
     if do_svd:
         feat_dim = 300
         svd = TruncatedSVD(n_components=feat_dim, n_iter=12)
@@ -106,20 +92,13 @@ def process_citeseer(args):
         cls2idx[cls] = cls2idx[cls] if cls in cls2idx else len(cls2idx)
     classes = [cls2idx[c] for c in classes]
     citing_classes = [cls2idx[c] for c in citing_classes]
-    # pdb.set_trace()
     torch.save({'n_author': n_citing, 'n_paper': n_paper, 'classes': classes, 'author_classes': citing_classes,
                 'paper_author': paper_citing, 'author_paper': citing_paper, 'paperwt': paperwt, 'authorwt': citingwt,
                 'paper_X': X, 'author_X': citing_X},
-               'data/citeseer{}cls{}.pt'.format(len(set(classes)), feat_dim))  # _{}cls.pt'.format(len(set(classes))))
+               'data/citeseer{}cls{}.pt'.format(len(set(classes)), feat_dim))
 
 
 def process_citeseer_edge():
-    '''
-    Processing Citeseer data including the edges. Include 
-    citeseer.content of form <paper_id> <word_attributes>+ <class_label>
-    citeseer.cites of form <id of cited paper> <id of citing paper>
-    paper_citing, cited papers are hypernodes, citing papers are hyperedges.
-    '''
     content_path = 'data/citeseer/citeseer.content'
     cites_path = 'data/citeseer/citeseer.cites'
     paper2citing = defaultdict(set)
@@ -129,8 +108,6 @@ def process_citeseer_edge():
         for line in lines:
             line = line.strip().split('\t')
             try:
-                # paper2citing[int(line[0])].add(int(line[1]))
-                # citing2paper[int(line[1])].add(int(line[0]))
                 paper2citing[line[0]].add(line[1])
                 citing2paper[line[1]].add(line[0])
             except ValueError as e:
@@ -145,11 +122,8 @@ def process_citeseer_edge():
     citingwt = torch.zeros(len(paper2citing))
     n_paper = 0
     for citing, papers in citing2paper.items():
-        # pdb.set_trace()
-        # remove papers that are only cited by one paper
         if len(papers) == 1:
             continue
-        # pdb.set_trace()
         citing_idx = id2citing_idx[citing] if citing in id2citing_idx else len(id2citing_idx)
         id2citing_idx[citing] = citing_idx
         for paper in papers:
@@ -174,10 +148,8 @@ def process_citeseer_edge():
 
             paper_id = line[0]
             if paper_id not in id2paper_idx:
-                # count skips
                 n_skips += 1
                 continue
-                # raise Exception('not in id2')
             x = torch.FloatTensor([int(w) for w in line[1:-1]])
             idx = id2paper_idx[paper_id]
             paper_idx_set.add(idx)
@@ -198,29 +170,15 @@ def process_citeseer_edge():
     for cls in set(classes):
         cls2idx[cls] = cls2idx[cls] if cls in cls2idx else len(cls2idx)
     classes = [cls2idx[c] for c in classes]
-    # pdb.set_trace()
     torch.save({'n_author': n_citing, 'n_paper': n_paper, 'classes': classes, 'paper_author': paper_citing,
                 'author_paper': citing_paper, 'paperwt': paperwt, 'authorwt': citingwt, 'paper_X': X},
-               'data/citeseer{}.pt'.format(feat_dim))  # _{}cls.pt'.format(len(set(classes))))
+               'data/citeseer{}.pt'.format(feat_dim))
 
 
-'''
-Example author line:
-Title: DESIGN SPACE NAVIGATION AS A COLLABORATIVE AID
-Author: CHARLES PETRIE AND MARK CUTKOSKY AND HISUP PARK
-Abstract: The Redux 0 server is an agent, with 
-For cora, authors are hyperedges and papers are edges.
-'''
 a_pat = re.compile("\s*and\s*|\s*,\s*")
 
 
 def process_meta_files(args, path="data/cora/extractions"):
-    '''
-    process directory of meta files. Want tuples of indices of which author 
-    wrote which papers, and which papers were written by which authors.
-    Authors and papers designated by integer indices. 
-    Abstract: The Redux 0 server is an agent, with 
-    '''
     author2idx = {}
     paper2idx = {}
     paper_author = []
@@ -229,12 +187,9 @@ def process_meta_files(args, path="data/cora/extractions"):
     n_author = 0
     n_paper = 0
     files = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-    # files = files[:10000]
-    # files = files[:2000]
-    paper2cls = torch.load('data/paper2cls.pt')  # process_cora_cls()
+    paper2cls = torch.load('data/paper2cls.pt')
 
-    # keep top 7 classes
-    n_cls = 10  # 15 #7
+    n_cls = 10
     cls2cnt = defaultdict(int)
     for fi in files:
         fname = fi.split('/')[-1]
@@ -245,19 +200,14 @@ def process_meta_files(args, path="data/cora/extractions"):
     classes = list(cls2cnt.keys())
     classes.sort(key=lambda x: cls2cnt[x])
     cls_set = set(classes[-n_cls:])
-    # pdb.set_trace()
 
-    # paper2cls = process_cora_cls()
-    # n_cls = len(set(paper2cls.values()))
     author_lines = []
     paper_lines = []
     fname_lines = []
     abstract_lines = []
-    # Title: The Redux 0 S
     title_lines = []
     classes = []
     empty_cnt = 0
-    # papers and authors to weights, determined by freq
     paper2wt = defaultdict(set)
     author2wt = defaultdict(set)
     for fi in files:
@@ -277,61 +227,38 @@ def process_meta_files(args, path="data/cora/extractions"):
                 ab_line = line[10:].lower().strip()
 
         fname = fi.split('/')[-1]
-        if a_line is None or p_line is None or ab_line is None or fname not in paper2cls or paper2cls[
-            fname] not in cls_set:
-            # print('author line blank!')
-            # pdb.set_trace()
+        if a_line is None or p_line is None or ab_line is None or fname not in paper2cls or paper2cls[fname] not in cls_set:
             empty_cnt += 1
             continue
         author_lines.append(a_line)
         paper_lines.append(p_line)
         abstract_lines.append(ab_line)
-        # title_lines.append(t_line) #add title!
         fname_lines.append(fname)
-        # paper_cnt = defaultdict(int)
         authors = a_pat.split(a_line)
         for author in authors:
             author_cnt[author] += 1
-        # collect word freq, for tfidf
-    # stop words!!
     tfidf = feat_extract.text.TfidfVectorizer(max_features=1000, ngram_range=(1, 2), max_df=.2)
     sel_idx = []
 
     for i, a_line in enumerate(author_lines):
-        authors = a_pat.split(a_line)  # a_line.split(' and ')
+        authors = a_pat.split(a_line)
         p_line = paper_lines[i]
         f_line = fname_lines[i]
         if f_line not in paper2cls:
-            # print('not in dict')
-            # pdb.set_trace()
             continue
         cur_cls = paper2cls[f_line]
-        '''
-        Title: DESIGN SPACE NAVIGATION AS A COLLABORATIVE AID
-        Author: CHARLES PETRIE AND MARK CUTKOSKY AND HISUP PARK
-        '''
-        # for author in a:
         a_sum = [author_cnt[a] for a in authors]
 
         if sum(a_sum) <= len(a_sum):
-            # only keep papers where at least one author has two papers.:
             continue
 
         paper = p_line
-        '''
-        if paper in paper2idx:
-            paper_idx = paper2idx[paper]
-        else:
-            paper_idx = len(paper2idx)
-            paper2idx[paper] = paper_idx
-        '''
         paper2idx[paper] = n_paper
         paper_idx = n_paper
         n_paper += 1
         classes.append(cur_cls)
         sel_idx.append(i)
         for author in authors:
-            # only keep the
             if author_cnt[author] == 1:
                 continue
 
@@ -345,23 +272,16 @@ def process_meta_files(args, path="data/cora/extractions"):
             paper_author.append([paper_idx, author_idx])
             author_paper.append([author_idx, paper_idx])
 
-    # tfidf.fit([abstract_lines[i] for i in sel_idx])
     X = tfidf.fit_transform([abstract_lines[i] for i in sel_idx])
     print('created abstrct rep!')
     feat_dim = X.shape[-1]
-    do_svd = args.do_svd  # False
+    do_svd = args.do_svd
     if do_svd:
         feat_dim = 300
         svd = TruncatedSVD(n_components=feat_dim, n_iter=12)
         X = svd.fit_transform(X)
-        # svd = TruncatedSVD(n_components=300, n_iter=7)
-        # X = svd.fit_transform(X)
     else:
         X = X.todense()
-
-    # pdb.set_trace()
-
-    # author embed?! abstracts of authors!!
 
     n_author = len(author2idx)
     paperwt = torch.zeros(n_paper)
@@ -376,14 +296,10 @@ def process_meta_files(args, path="data/cora/extractions"):
     torch.save({'n_author': n_author, 'n_paper': n_paper, 'classes': classes, 'paper_author': paper_author,
                 'author_paper': author_paper, 'paperwt': paperwt, 'authorwt': authorwt, 'paper_X': X},
                'data/cora_author_{}cls{}.pt'.format(len(set(classes)), feat_dim))
-    # pdb.set_trace()
     return paper_author, author_paper, n_author, n_paper
 
 
 def process_cora_cls(args, path='data/cora/classifications'):
-    '''
-    classification for cora papers
-    '''
     papers = set()
     classes = set()
     paper2cls = {}
@@ -392,11 +308,7 @@ def process_cora_cls(args, path='data/cora/classifications'):
         for line in lines:
             line = line.split()
             if len(line) < 2:
-                # pdb.set_trace()
                 continue
-            # elif len(line) > 2:
-            #    pdb.set_trace()
-            # assert len(line) == 2
             paper = line[0]
             cls = line[1].split('/')[1]
             papers.add(line[0])
@@ -404,17 +316,15 @@ def process_cora_cls(args, path='data/cora/classifications'):
             paper2cls[paper] = cls
 
     print('cora number of lines {} papers {} classes {}'.format(len(lines), len(papers), len(classes)))
-    # pdb.set_trace()
     torch.save(paper2cls, 'data/paper2cls.pt')
     return paper2cls
 
 
 if __name__ == '__main__':
     args = utils.parse_args()
-    dataset_name = 'citeseer'  # 'cora'
+    dataset_name = 'citeseer'
     dataset_name = 'cora'
     if dataset_name == 'cora':
-        # process_cora_cls('data/cora/classifications')
         process_meta_files(args)
     else:
         process_citeseer(args)

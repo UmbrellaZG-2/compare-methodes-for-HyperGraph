@@ -5,9 +5,6 @@ from torch.nn.modules.module import Module
 
 
 class GraphConvolution(Module):
-    """
-    Simple GCN layer, similar to https://arxiv.org/abs/1609.02907
-    """
 
     def __init__(self, in_features, out_features, bias=False):
         super(GraphConvolution, self).__init__()
@@ -42,12 +39,6 @@ class GraphConvolution(Module):
                + str(self.out_features) + ')'
     
 class SparseMM(torch.autograd.Function):
-    """
-    Sparse x dense matrix multiplication with autograd support.
-    Implementation by Soumith Chintala:
-    https://discuss.pytorch.org/t/
-    does-pytorch-support-autograd-on-sparse-matrix/6156/7
-    """
     @staticmethod
     def forward(ctx, M1, M2):
         ctx.save_for_backward(M1, M2)

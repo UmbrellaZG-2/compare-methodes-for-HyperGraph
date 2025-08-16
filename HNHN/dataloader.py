@@ -5,7 +5,6 @@ import os
 import scipy.io as scio
 
 def load_data(dataset_str):
-    # 使用绝对路径加载数据
     data_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "{}.mat")).format(dataset_str)
     data_mat = scio.loadmat(data_path)
     h = data_mat['H']
@@ -19,7 +18,6 @@ def load_data(dataset_str):
     return h, X, labels, idx_train_list, idx_test_list
 
 def normalize_features(mx):
-    """Row-normalize sparse matrix"""
     rowsum = np.array(mx.sum(1))
     if np.where(rowsum == 0)[0].shape[0] != 0:
         indices = np.where(rowsum == 0)[0]

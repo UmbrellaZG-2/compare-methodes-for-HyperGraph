@@ -1,4 +1,0 @@
-# 项目介绍
-在linux系统输入 python main.py
-项目自动读取data下的所有.mat文件
-结果保存到result中

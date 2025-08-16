@@ -24,7 +24,6 @@ class HCoN(nn.Module):
         neg_slope = 0.2
         
         
-        # layer 1
         x_part1 = self.gcx1_part1(x0, hx1) * alpha
         x_part2 = self.gcx1_part2(y0, hx2) * (1 - alpha)
         x1 = x_part1 + x_part2   
@@ -37,7 +36,6 @@ class HCoN(nn.Module):
         y1 = F.leaky_relu(y1, negative_slope=neg_slope)
         
         
-        # layer 2        
         x_part1 = self.gcx2_part1(x1, hx1) * alpha
         x_part2 = self.gcx2_part2(y1, hx2) * (1 - alpha)
         x2 = x_part1 + x_part2 

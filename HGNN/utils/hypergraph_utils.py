@@ -1,9 +1,3 @@
-# --------------------------------------------------------
-# Utility functions for Hypergraph
-#
-# Author: Yifan Feng
-# Date: November 2018
-# --------------------------------------------------------
 import os
 import random
 
@@ -12,13 +6,6 @@ import scipy.sparse as sp
 from sklearn.metrics import roc_auc_score, average_precision_score, precision_score, recall_score, f1_score
 import torch
 def Eu_dis(x):
-    """
-    Calculate the distance among each raw of x
-    :param x: N X D
-                N: the object number
-                D: Dimension of the feature
-    :return: N X N distance matrix
-    """
     x = np.mat(x)
     aa = np.sum(np.multiply(x, x), 1)
     ab = x * x.T
@@ -30,25 +17,14 @@ def Eu_dis(x):
 
 
 def feature_concat(*F_list, normal_col=False):
-    """
-    Concatenate multiple modality feature. If the dimension of a feature matrix is more than two,
-    the function will reduce it into two dimension(using the last dimension as the feature dimension,
-    the other dimension will be fused as the object dimension)
-    :param F_list: Feature matrix list
-    :param normal_col: normalize each column of the feature
-    :return: Fused feature matrix
-    """
     features = None
     for f in F_list:
         if f is not None and f != []:
-            # deal with the dimension that more than two
             if len(f.shape) > 2:
                 f = f.reshape(-1, f.shape[-1])
-            # normal each column
             if normal_col:
                 f_max = np.max(np.abs(f), axis=0)
                 f = f / f_max
-            # facing the first feature matrix appended to fused feature matrix
             if features is None:
                 features = f
             else:
@@ -60,15 +36,9 @@ def feature_concat(*F_list, normal_col=False):
 
 
 def hyperedge_concat(*H_list):
-    """
-    Concatenate hyperedge group in H_list
-    :param H_list: Hyperedge groups which contain two or more hypergraph incidence matrix
-    :return: Fused hypergraph incidence matrix
-    """
     H = None
     for h in H_list:
         if h is not None and h != []:
-            # for the first H appended to fused hypergraph incidence matrix
             if H is None:
                 H = h
             else:
@@ -83,12 +53,6 @@ def hyperedge_concat(*H_list):
 
 
 def generate_G_from_H(H, variable_weight=False):
-    """
-    calculate G from hypgraph incidence matrix H
-    :param H: hypergraph incidence matrix H
-    :param variable_weight: whether the weight of hyperedge is variable
-    :return: G
-    """
     if type(H) != list:
         return _generate_G_from_H(H, variable_weight)
     else:
@@ -99,19 +63,10 @@ def generate_G_from_H(H, variable_weight=False):
 
 
 def _generate_G_from_H(H, variable_weight=False):
-    """
-    calculate G from hypgraph incidence matrix H
-    :param H: hypergraph incidence matrix H
-    :param variable_weight: whether the weight of hyperedge is variable
-    :return: G
-    """
     H = np.array(H)
     n_edge = H.shape[1]
-    # the weight of the hyperedge
     W = np.ones(n_edge)
-    # the degree of the node
     DV = np.sum(H * W, axis=1)
-    # the degree of the hyperedge
     DE = np.sum(H, axis=0)
 
     invDE = np.mat(np.diag(np.power(DE, -1)))
@@ -130,16 +85,7 @@ def _generate_G_from_H(H, variable_weight=False):
 
 
 def construct_H_with_KNN_from_distance(dis_mat, k_neig, is_probH=True, m_prob=1):
-    """
-    construct hypregraph incidence matrix from hypergraph node distance matrix
-    :param dis_mat: node distance matrix
-    :param k_neig: K nearest neighbor
-    :param is_probH: prob Vertex-Edge matrix or binary
-    :param m_prob: prob
-    :return: N_object X N_hyperedge
-    """
     n_obj = dis_mat.shape[0]
-    # construct hyperedge from the central feature space of each node
     n_edge = n_obj
     H = np.zeros((n_obj, n_edge))
     for center_idx in range(n_obj):
@@ -159,15 +105,6 @@ def construct_H_with_KNN_from_distance(dis_mat, k_neig, is_probH=True, m_prob=1)
 
 
 def construct_H_with_KNN(X, K_neigs=[10], split_diff_scale=False, is_probH=True, m_prob=1):
-    """
-    init multi-scale hypergraph Vertex-Edge matrix from original node feature matrix
-    :param X: N_object x feature_number
-    :param K_neigs: the number of neighbor expansion
-    :param split_diff_scale: whether split hyperedge group at different neighbor scale
-    :param is_probH: prob Vertex-Edge matrix or binary
-    :param m_prob: prob
-    :return: N_object x N_hyperedge
-    """
     if len(X.shape) != 2:
         X = X.reshape(-1, X.shape[-1])
 
@@ -185,7 +122,6 @@ def construct_H_with_KNN(X, K_neigs=[10], split_diff_scale=False, is_probH=True,
     return H
 
 def normalize_features(mx):
-    """Row-normalize sparse matrix"""
     rowsum = np.array(mx.sum(1))
     if np.where(rowsum == 0)[0].shape[0] != 0:
         indices = np.where(rowsum == 0)[0]
@@ -213,10 +149,6 @@ def hamming_Loss(y_true, y_pred):
 def calculate_metrics(pred, target, threshold=0.5):
     pred = np.array(pred > threshold, dtype=float)
     
-#     sum_pred = np.sum(pred, 1)
-#     print(np.where(sum_pred == 0))
-#     sys.exit()
-    
     return {
         'micro/precision': precision_score(y_true=target, y_pred=pred, average='micro'),
             'micro/recall': recall_score(y_true=target, y_pred=pred, average='micro'),
@@ -233,11 +165,8 @@ def calculate_metrics(pred, target, threshold=0.5):
             'hammingLoss': hamming_Loss(target, pred)
             }
 def accuracy(output, labels):
-    # 标签中值为1的下标
     labels = np.where(labels)[1]
-    # 每一行最大值的下标
     preds = np.argmax(output, axis=1)
-    # 预测对的值的个数
     correct = np.sum(labels == preds) * 1.0
     a = correct / len(labels)
     return correct / len(labels)

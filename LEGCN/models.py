@@ -71,4 +71,4 @@ class GCN(nn.Module):
         PvT_cpu = PvT.cpu()
         x = torch.spmm(PvT_cpu, x_cpu).to(x.device)
 
-        return F.log_softmax(x, dim=1),x
+        return F.log_softmax(x, dim=1), x

@@ -72,17 +72,27 @@ def load_data(dataset_str=None):
     import scipy.io as scio
     data_mat = scio.loadmat(data_path)
     # 加载数据
-    h = data_mat['H']
-    X = data_mat['X0']
+    H = data_mat['H']  # 重命名h为adj
+    X = data_mat['X0']  # 重命名X为features
     labels = data_mat['labels']
-    idx_train_list = data_mat['idx_train']-1
-    idx_val_list = data_mat['idx_test']-1
+    idx_train = data_mat['idx_train']-1
+    idx_val = data_mat['idx_test']-1
+    # 假设测试集与验证集相同，如果有单独的测试集索引可以修改这里
+    idx_test = idx_val.copy()
     
     X = normalize_features(X)
-    Y = np.eye(h.shape[1])
+    Y = np.eye(H.shape[1])  # 重命名Y为PvT
     
-    return h, X, Y, labels, idx_train_list, idx_val_list
+    return H, Y, X, labels, idx_train, idx_val, idx_test
 
+def sparse_mx_to_torch_sparse_tensor(sparse_mx):
+    """Convert a scipy sparse matrix to a torch sparse tensor."""
+    sparse_mx = sparse_mx.tocoo().astype(np.float32)
+    indices = torch.from_numpy(
+        np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
+    values = torch.from_numpy(sparse_mx.data)
+    shape = torch.Size(sparse_mx.shape)
+    return torch.sparse.FloatTensor(indices, values, shape)
 
 def normalize_features(mx):
     """Row-normalize sparse matrix"""
@@ -97,18 +107,17 @@ def normalize_features(mx):
     mx = r_mat_inv.dot(mx)
     return mx
 
+def normalize(mx):
+    """Row-normalize sparse matrix"""
+    rowsum = np.array(mx.sum(1))
+    r_inv = np.power(rowsum, -1).flatten()
+    r_inv[np.isinf(r_inv)] = 0.
+    r_mat_inv = sp.diags(r_inv)
+    mx = (r_mat_inv).dot(mx)
+    return mx
 
 def accuracy(output, labels):
     preds = output.max(1)[1].type_as(labels)
     correct = preds.eq(labels).double()
     correct = correct.sum()
     return correct / len(labels)
-
-def sparse_mx_to_torch_sparse_tensor(sparse_mx):
-    """Convert a scipy sparse matrix to a torch sparse tensor."""
-    sparse_mx = sparse_mx.tocoo().astype(np.float32)
-    indices = torch.from_numpy(
-        np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
-    values = torch.from_numpy(sparse_mx.data)
-    shape = torch.Size(sparse_mx.shape)
-    return torch.sparse.FloatTensor(indices, values, shape)

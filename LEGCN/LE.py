@@ -2,6 +2,35 @@ import numpy as np
 import scipy.sparse as sp
 from itertools import combinations
 
+
+def hypergraph_to_pairs(H):
+    """
+    将超图关联矩阵H转换为N×2的pair表示
+    
+    参数:
+        H (sp.spmatrix): 超图关联矩阵，形状为(n_vertices, n_hyperedges)
+                         H[i, j] = 1 表示顶点i属于超边j
+        
+    返回:
+        pairs (np.ndarray): N×2矩阵，每行表示一个顶点-超边对 [vertex_idx, hyperedge_idx]
+    """
+    # 确保输入是稀疏矩阵（节省内存）
+    if not sp.issparse(H):
+        H = sp.csr_matrix(H)
+    
+    # 转换为COO格式以便获取非零元素的坐标
+    H_coo = H.tocoo()
+    
+    # 提取所有非零元素的位置（即所有顶点-超边对）
+    rows = H_coo.row     # 顶点索引
+    cols = H_coo.col     # 超边索引
+    
+    # 组合成N×2矩阵
+    pairs = np.column_stack((rows, cols))
+    
+    return pairs
+
+
 def transform(pairs, v_threshold=30, e_threshold=30):
     """construct line expansion from original hypergraph
     INPUT:

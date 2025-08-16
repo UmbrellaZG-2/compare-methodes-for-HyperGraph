@@ -9,7 +9,6 @@ import scipy.io as scio
     
 
 class dotdict(dict):
-    """dot.notation access to dictionary attributes"""
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
@@ -27,39 +26,30 @@ def seed_everything(seed=2021):
     
 
 def load_data(dataset_str=None):
-    # 使用相对路径获取data文件夹
     data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
     
-    # 确保data文件夹存在
     if not os.path.exists(data_dir):
         raise FileNotFoundError(f"数据文件夹不存在: {data_dir}")
     
-    # 扫描data文件夹下的所有mat文件
     mat_files = [f for f in os.listdir(data_dir) if f.endswith('.mat')]
     
     if not mat_files:
         raise FileNotFoundError(f"在{data_dir}中未找到任何.mat文件")
     
-    # 确定要加载的数据集文件
     if dataset_str is None:
-        # 如果未指定数据集，使用第一个找到的mat文件
         data_file = mat_files[0]
-        dataset_str = data_file[:-4]  # 移除.mat后缀
+        dataset_str = data_file[:-4]
         print(f"未指定数据集，使用默认数据集: {dataset_str}")
     else:
-        # 检查指定的数据集是否存在
         data_file = f"{dataset_str}.mat"
         if data_file not in mat_files:
-            # 如果不存在，使用第一个找到的mat文件
             data_file = mat_files[0]
             dataset_str = data_file[:-4]
             print(f"指定的数据集{data_file}不存在，使用默认数据集: {dataset_str}")
     
-    # 构建数据文件的相对路径
     data_path = os.path.join(data_dir, data_file)
     print(f"正在加载数据文件: {data_path}")
     data_mat = scio.loadmat(data_path)
-    # 加载数据
     h = data_mat['H']
     X = data_mat['X0']
     labels = data_mat['labels']
@@ -73,7 +63,6 @@ def load_data(dataset_str=None):
 
 
 def normalize_features(mx):
-    """Row-normalize sparse matrix"""
     rowsum = np.array(mx.sum(1))
     if np.where(rowsum == 0)[0].shape[0] != 0:
         indices = np.where(rowsum == 0)[0]
@@ -94,7 +83,6 @@ def accuracy(output, labels):
 
 
 def normalize_sparse_hypergraph_symmetric(H):
-    
     rowsum = np.array(H.sum(1))
     r_inv_sqrt = np.power(rowsum, -0.5).flatten()
     r_inv_sqrt[np.isinf(r_inv_sqrt)] = 0.

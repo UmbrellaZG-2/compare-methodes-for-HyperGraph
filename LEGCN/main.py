@@ -1,6 +1,7 @@
 import time
 import argparse
 import numpy as np
+import scipy.sparse as sp
 from tqdm import tqdm
 import torch
 import torch.nn.functional as F
@@ -8,8 +9,10 @@ import torch.optim as optim
 import os
 import csv
 
-from utils import load_data, accuracy, sparse_mx_to_torch_sparse_tensor
+from LE import hypergraph_to_pairs, transform
+from utils import load_data, accuracy
 from models import GCN, SpGAT, GAT
+
 
 # 设置默认参数
 def set_default_args():
@@ -25,43 +28,43 @@ def set_default_args():
             self.dropout = 0.5
             self.modelType = 0
             self.dataset = None  # 默认为None，表示处理所有数据集
+
     return Args()
+
 
 # 获取命令行参数并合并默认参数
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--seed', type=int, help='Random seed.')
-    parser.add_argument('--epochs', type=int, help='Number of epochs to train.')
-    parser.add_argument('--lr', type=float, help='Initial learning rate.')
-    parser.add_argument('--fastmode', type=int, help='Validate during training pass.')
-    parser.add_argument('--weight_l2', type=float, help='weight for parameter L2 regularization')
-    parser.add_argument('--weight_decay', type=float, help='Weight decay (L2 loss on parameters).')
-    parser.add_argument('--hidden', type=int, help='Number of hidden units.')
-    parser.add_argument('--dropout', type=float, help='Dropout rate (1 - keep probability).')
-    parser.add_argument('--modelType', type=int, help='GCN (0), SpGAT (1), GAT (2)')
-    parser.add_argument('--dataset', type=str, help='Name of dataset, or "all" to process all datasets')
+    parser.add_argument('--seed', type=int, default=2025, help='Random seed.')
+    parser.add_argument('--epochs', type=int, default=50, help='Number of epochs to train.')
+    parser.add_argument('--lr', type=float, default=0.02, help='Initial learning rate.')
+    parser.add_argument('--fastmode', type=int, default=0, help='Validate during training pass.')
+    parser.add_argument('--weight_l2', type=float, default=1.5e-3, help='weight for parameter L2 regularization')
+    parser.add_argument('--weight_decay', type=float, default=5e-3, help='Weight decay (L2 loss on parameters).')
+    parser.add_argument('--hidden', type=int, default=256, help='Number of hidden units.')
+    parser.add_argument('--dropout', type=float, default=0.5, help='Dropout rate (1 - keep probability).')
+    parser.add_argument('--modelType', type=int, default=0, help='GCN (0), SpGAT (1), GAT (2)')
+    parser.add_argument('--dataset', type=str, default=None, help='Name of dataset, or "all" to process all datasets')
+    parser.add_argument('--gpu', type=int, default=-1, help='GPU id to use, -1 for CPU')
 
     # 获取命令行参数
     cmd_args = parser.parse_args()
-    # 获取默认参数
-    default_args = set_default_args()
-
-    # 合并参数
-    for attr in vars(default_args):
-        if getattr(cmd_args, attr) is None:
-            setattr(cmd_args, attr, getattr(default_args, attr))
-
     return cmd_args
+
 
 args = get_args()
 
-def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimizer):
-    max_idx = max(idx_train).item()
 
+def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimizer):
     tic = time.time()
     model.train()
     optimizer.zero_grad()
-    output, x = model(features, adj, PvT)
+    output = model(features, adj, PvT)
+
+    # 确保索引是整数类型
+    idx_train = idx_train.to(torch.long)
+    idx_val = idx_val.to(torch.long)
+
     loss_train = F.nll_loss(output[idx_train], labels[idx_train])
 
     l2 = 0
@@ -77,11 +80,11 @@ def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimize
         # Evaluate validation set performance separately,
         # deactivates dropout during validation run.
         model.eval()
-        output, x = model(features, adj, PvT)
+        output = model(features, adj, PvT)
     loss_val = F.nll_loss(output[idx_val], labels[idx_val])
 
     acc_val = accuracy(output[idx_val], labels[idx_val])
-    print('Epoch: {:04d}'.format(epoch+1),
+    print('Epoch: {:04d}'.format(epoch + 1),
           'loss_train: {:.4f}'.format(loss_train.item()),
           'acc_train: {:.4f}'.format(acc_train.item()),
           'loss_val: {:.4f}'.format(loss_val.item()),
@@ -91,7 +94,10 @@ def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimize
 
 def test(model, features, adj, PvT, labels, idx_test, dataset_name):
     model.eval()
-    output, x = model(features, adj, PvT)
+    output = model(features, adj, PvT)
+
+    # 确保索引是整数类型
+    idx_test = idx_test.to(torch.long)
 
     # 计算测试集的损失和准确率
     loss_test = F.nll_loss(output[idx_test], labels[idx_test])
@@ -101,86 +107,123 @@ def test(model, features, adj, PvT, labels, idx_test, dataset_name):
           "accuracy= {:.4f}".format(acc_test.item()))
     return acc_test.item(), loss_test.item()
 
+
 # 保存结果到CSV文件
 def save_results_to_csv(results, file_path):
     # 确保目录存在
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    
+
     # 写入CSV文件
     with open(file_path, 'w', newline='') as csvfile:
         fieldnames = ['dataset', 'accuracy', 'loss', 'time']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        
+
         writer.writeheader()
         for result in results:
             writer.writerow(result)
+
 
 # 处理单个数据集
 def process_dataset(dataset_path):
     dataset_name = os.path.basename(dataset_path).split('.')[0]
     print(f"\n处理数据集: {dataset_name}")
-    
+
     # 加载数据
-    adj, PvT, features, labels, idx_train, idx_val, idx_test = load_data(dataset_name)
-    
-    # model definition
+    device = torch.device("cuda" if args.gpu >= 0 else "cpu")
+    H, Y, X, labels, idx_train, idx_val, idx_test = load_data(dataset_name)
+
+    # 正确转换标签格式
+    if isinstance(labels, np.ndarray) and labels.ndim == 2:
+        # 如果标签是二维数组（one-hot编码）
+        labels = np.argmax(labels, axis=1)  # 转换为类别索引
+    elif isinstance(labels, np.ndarray) and labels.ndim == 1:
+        # 如果已经是一维类别索引
+        pass  # 无需转换
+    else:
+        # 处理其他格式（如稀疏矩阵）
+        labels = np.array(labels.todense()).argmax(axis=1)
+
+    # 确保标签是1D int数组
+    labels = labels.astype(np.int64)
+    print(f"转换后标签形状: {labels.shape}, 类别数: {np.unique(labels).size}")
+
+    pairs = hypergraph_to_pairs(H)
+    adj, Pv, PvT, Pe, PeT = transform(pairs)
+    adj = adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj)
+
+    from utils import sparse_mx_to_torch_sparse_tensor, normalize
+
+    adj = normalize(adj + 2.0 * sp.eye(adj.shape[0]))
+
+    # 创建PyTorch张量
+    features = torch.FloatTensor(np.array(Pv @ X.todense())).to(device)
+    labels = torch.LongTensor(labels).to(device)
+    PvT = sparse_mx_to_torch_sparse_tensor(PvT).to(device)
+
+    # 正确分配索引集 - 确保是一维整数张量
+    idx_train = torch.LongTensor(idx_train[0].astype(np.int64)).flatten().to(device)
+    idx_val = torch.LongTensor(idx_val[0].astype(np.int64)).flatten().to(device)
+    idx_test = torch.LongTensor(idx_test[0].astype(np.int64)).flatten().to(device)
+
+    # 将邻接矩阵转换为稠密张量
+    adj = torch.FloatTensor(adj.toarray()).to(device)
+
+    # 打印调试信息
+    print(f"特征矩阵形状: {features.shape}")
+    print(f"邻接矩阵形状: {adj.shape}")
+    print(f"训练集大小: {len(idx_train)}, 验证集大小: {len(idx_val)}, 测试集大小: {len(idx_test)}")
+
+    # 计算类别数
+    n_classes = int(labels.max().item() - labels.min().item() + 1)
+    print(f"模型将使用 {n_classes} 个输出类别")
+
+    # 模型定义
     if args.modelType == 0:
-        adj = sparse_mx_to_torch_sparse_tensor(adj)
         model = GCN(nfeat=features.shape[1],
                     nhid=args.hidden,
-                    nclass=labels.max().item() + 1,
+                    nclass=n_classes,
                     dropout=args.dropout)
     elif args.modelType == 1:
-        adj = torch.FloatTensor(np.array(adj.todense()))
         model = SpGAT(nfeat=features.shape[1],
-                    nhid=args.hidden,
-                    nclass=labels.max().item() + 1,
-                    dropout=args.dropout)
+                      nhid=args.hidden,
+                      nclass=n_classes,
+                      dropout=args.dropout)
     elif args.modelType == 2:
-        adj = torch.FloatTensor(np.array(adj.todense()))
         model = GAT(nfeat=features.shape[1],
                     nhid=args.hidden,
-                    nclass=labels.max().item() + 1,
+                    nclass=n_classes,
                     dropout=args.dropout)
-    
-    args.cuda = torch.cuda.is_available()
-    
-    np.random.seed(args.seed)
+
+    # 设置随机种子
     torch.manual_seed(args.seed)
-    if args.cuda:
+    if device.type == 'cuda':
         torch.cuda.manual_seed(args.seed)
-    
-    if args.cuda:
-        features = features.cuda()
-        adj = adj.cuda()
-        Pvp = PvT.cuda()
-        labels = labels.cuda()
-        idx_train = idx_train.cuda()
-        idx_val = idx_val.cuda()
-        idx_test = idx_test.cuda()
-        model.cuda()
-    
-    
+
+    model.to(device)
+
+    # 优化器
     optimizer = optim.Adam(model.parameters(),
-                lr=args.lr, weight_decay=args.weight_decay)
-    
-    # train model
+                           lr=args.lr, weight_decay=args.weight_decay)
+
+    # 训练模型
     tic = time.time()
     for epoch in range(args.epochs):
         train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimizer)
+
     total_time = time.time() - tic
     print("Optimization Finished!")
-    print(f"Total time elapsed: {total_time:.4f}s")
-    
-    # test model
+    print(f"总耗时: {total_time:.4f}s")
+
+    # 测试模型
     acc_test, loss_test = test(model, features, adj, PvT, labels, idx_test, dataset_name)
-    
+
     return {
         'dataset': dataset_name,
         'accuracy': acc_test,
         'loss': loss_test,
         'time': total_time
     }
+
 
 # 获取要处理的数据集
 if args.dataset == 'all' or args.dataset is None:
@@ -210,4 +253,5 @@ print(f"所有结果已保存到: {csv_file_path}")
 # 打印所有结果摘要
 print("\n结果摘要:")
 for result in results:
-    print(f"数据集: {result['dataset']}, 准确率: {result['accuracy']:.4f}, 损失: {result['loss']:.4f}, 时间: {result['time']:.4f}s")
+    print(
+        f"数据集: {result['dataset']}, 准确率: {result['accuracy']:.4f}, 损失: {result['loss']:.4f}, 时间: {result['time']:.4f}s")

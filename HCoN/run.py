@@ -9,10 +9,6 @@ import argparse
 import numpy as np
 
 
-"""
-run: python run.py --gpu_id 0 --dataname citeseer
-"""
-
 
 def training(data, args, s = 2021):
 
@@ -27,7 +23,6 @@ def training(data, args, s = 2021):
     hy1 = torch.from_numpy(data.hy1.toarray()).float().cuda()
     hy2 = torch.from_numpy(data.hy2.toarray()).float().cuda()
     
-    # Convert numpy.uint16 to int64 before creating tensor
     idx_train = torch.LongTensor(data.idx_train.astype(np.int64)).cuda()
     idx_test = torch.LongTensor(data.idx_test.astype(np.int64)).cuda()
     labels = torch.LongTensor(np.where(data.labels)[1]).cuda()
@@ -59,16 +54,6 @@ def training(data, args, s = 2021):
         optimizer.step()
         
         
-#         loss_val = F.nll_loss(x_output[idx_val], labels[idx_val])
-#         cost_val.append(loss_val.item())
-#         acc_val = accuracy(x_output[idx_val], labels[idx_val])
-        
-        
-#         if epoch > args.early_stop and cost_val[-1] > np.mean(cost_val[-(args.early_stop+1):-1]):
-#             print("Early stopping...")
-#             break
-        
-    # Test
     with torch.no_grad():
         model.eval()
         recovered, x_output = model(hx1, hx2, X, hy1, hy2, Y, args.alpha, args.beta) 
@@ -93,12 +78,11 @@ if __name__ == '__main__':
     H, X, Y, labels, idx_train_list, idx_test_list = load_data(setting.dataname)
         
     H_trainX = H.copy()
-    Y = np.eye(H.shape[1])  # use identity matrix
+    Y = np.eye(H.shape[1])
     hx1, hx2 = normalize_sparse_hypergraph_symmetric(H_trainX)
     hy1, hy2 = normalize_sparse_hypergraph_symmetric(H_trainX.transpose())
 
     
-    # 设置默认参数值
     dim_hidden = 512
     learning_rate = 0.001
     weight_decay = 0.001
@@ -106,7 +90,6 @@ if __name__ == '__main__':
     alpha = 0.8
     beta = 0.2
     
-    # 为特定数据集覆盖参数值
     if setting.dataname == "citeseer":
         dim_hidden = 512
         learning_rate = 0.001
@@ -168,14 +151,13 @@ if __name__ == '__main__':
     # 构建完整的结果文件路径，格式为：项目名+数据集名
     result_path = os.path.join(result_dir, f"HCoN_{setting.dataname}.csv")
     # 只保存最后一个trial的结果
-    if trial == idx_train_list.shape[0] - 1:
-        df = pd.DataFrame({
-            'trial': [trial + 1],
-            'accuracy': [acc_test[-1]],
-            'mean_accuracy': [m_acc],
-            'std_accuracy': [s_acc]
-        })
-        df.to_csv(result_path, index=False)
+    df = pd.DataFrame({
+        'trial': [trial + 1],
+        'accuracy': [acc_test[-1]],
+        'mean_accuracy': [m_acc],
+        'std_accuracy': [s_acc]
+    })
+    df.to_csv(result_path, index=False)
     
     # 只打印最终平均准确率
     print(f"HCoN_{setting.dataname} 平均准确率: {m_acc:.4f} ± {s_acc:.4f}")
