@@ -68,10 +68,13 @@ X, Y, G, train_idx_list, test_index_list = fetch_data(args)
 
 lst = ['trial', 'test_acc']
 
+result_dir = os.path.join(os.path.dirname(__file__), "..", "result")
+os.makedirs(result_dir, exist_ok=True)
+
 if args.model_name in ['UniGCN', 'UniGAT'] and args.add_self_loop:
-    save_path = './results/' + args.dataset + "_" + args.model_name + ".csv"
+    save_path = os.path.join(result_dir, args.dataset + "_" + args.model_name + ".csv")
 else:
-    save_path = './results/' + args.dataset + "_" + args.model_name + "_last_epoch.csv"
+    save_path = os.path.join(result_dir, args.dataset + "_" + args.model_name + "_last_epoch.csv")
 
 if not os.path.exists(save_path):
     pd.DataFrame(columns=lst).to_csv(save_path, index=False)
@@ -129,7 +132,8 @@ for run in range(train_idx_list.shape[0]):
         # best_test_acc = max(best_test_acc, test_acc)
         best_test_acc = test_acc
         time_list.append(train_time)
-    scio.savemat(args.model_name + '.mat',{'time_list':time_list})
+    mat_save_path = os.path.join(result_dir, args.model_name + '_' + args.dataset + '.mat')
+    scio.savemat(mat_save_path, {'time_list': time_list})
 #         # baselogger.info(f'epoch:{epoch} | loss:{loss:.4f} | train acc:{train_acc:.2f} | test acc:{test_acc:.2f} | time:{train_time*1000:.1f}ms')
 #
 #     resultlogger.info(

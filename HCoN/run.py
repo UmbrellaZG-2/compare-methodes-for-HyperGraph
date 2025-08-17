@@ -11,7 +11,7 @@ import numpy as np
 
 
 def training(data, args, s = 2021):
-
+    import time
     seed_everything(seed = s)
 
     H_trainX = torch.from_numpy(data.H_trainX.toarray()).float().cuda()
@@ -40,7 +40,11 @@ def training(data, args, s = 2021):
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=args.weight_decay)
     
     cost_val = []
+    time_list = []
+    total_start_time = time.time()
+    
     for epoch in range(epochs):
+        epoch_start_time = time.time()
         model.train()
 
         recovered, x_output = model(hx1, hx2, X, hy1, hy2, Y, args.alpha, args.beta) 
@@ -53,14 +57,18 @@ def training(data, args, s = 2021):
         loss_train.backward()
         optimizer.step()
         
+        epoch_time = time.time() - epoch_start_time
+        time_list.append(epoch_time)
         
+    total_time = time.time() - total_start_time
+    
     with torch.no_grad():
         model.eval()
         recovered, x_output = model(hx1, hx2, X, hy1, hy2, Y, args.alpha, args.beta) 
         loss_test = F.nll_loss(x_output[idx_test], labels[idx_test])
         acc_test = accuracy(x_output[idx_test], labels[idx_test])
         
-    return acc_test.item()
+    return acc_test.item(), total_time, time_list
 
 
 
@@ -103,6 +111,13 @@ if __name__ == '__main__':
     seed = 2021
     early = 100
         
+    # 创建result目录
+    import pandas as pd
+    import scipy.io as scio
+    result_dir = os.path.join(os.path.dirname(__file__), "..", "result")
+    if not os.path.exists(result_dir):
+        os.makedirs(result_dir)
+    
     acc_test = []
     for trial in range(599,600):
         idx_train = idx_train_list[trial]
@@ -132,22 +147,18 @@ if __name__ == '__main__':
         args.alpha = alpha
         args.beta = beta
 
-        test = training(data, args, s=seed)
+        test, total_time, time_list = training(data, args, s=seed)
         acc_test.append(test)
+        
+        # 保存时间信息到mat文件
+        time_mat_path = os.path.join(result_dir, f"HCoN_{setting.dataname}_time.mat")
+        scio.savemat(time_mat_path, {'time_list': time_list, 'total_time': total_time})
 
         
     # 保存结果到公共result文件夹
     acc_test = np.array(acc_test) * 100
     m_acc = np.mean(acc_test)
     s_acc = np.std(acc_test)
-    
-    # 保存结果到CSV文件
-    import pandas as pd
-    # 使用相对路径构建结果保存路径
-    result_dir = os.path.join(os.path.dirname(__file__), "..", "result")
-    # 确保result文件夹存在
-    if not os.path.exists(result_dir):
-        os.makedirs(result_dir)
     # 构建完整的结果文件路径，格式为：项目名+数据集名
     result_path = os.path.join(result_dir, f"HCoN_{setting.dataname}.csv")
     # 只保存最后一个trial的结果
@@ -155,7 +166,8 @@ if __name__ == '__main__':
         'trial': [trial + 1],
         'accuracy': [acc_test[-1]],
         'mean_accuracy': [m_acc],
-        'std_accuracy': [s_acc]
+        'std_accuracy': [s_acc],
+        'total_time': [total_time]  # 添加总时间列
     })
     df.to_csv(result_path, index=False)
     

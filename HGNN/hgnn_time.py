@@ -5,17 +5,13 @@ import copy
 import pandas as pd
 import torch
 import torch.optim as optim
-import pprint as pp
 import utils.hypergraph_utils as hgut
-from utils.hypergraph_utils import normalize_features, calculate_metrics, accuracy, seed_everything
+from utils.hypergraph_utils import accuracy, seed_everything
 from models import HGNN
-from config import get_config
 from datasets.dataloader import load_data
 import argparse
 import numpy as np
-import sys
 from torch import nn
-from datasets.dataloader import load_data
 
 seed_everything(2022)
 parser = argparse.ArgumentParser(description='HGNN')
@@ -103,7 +99,6 @@ if __name__ == '__main__':
 
     h, X, labels, idx_train_list, idx_val_list = load_data(setting.dataname)
     H = h.toarray()
-    Y = np.eye(H.shape[1])
     fts = X.toarray()
     lbls = labels
     G = hgut.generate_G_from_H(H)
@@ -124,9 +119,7 @@ if __name__ == '__main__':
         idx_train = torch.Tensor(idx_train.astype(np.int64)).long().to(device)
         idx_test = torch.Tensor(idx_test.astype(np.int64)).long().to(device)
 
-        lst = ['epoch', 'train_time', 'test_time']
-
-        save_csv = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "result", "HGNN_" + setting.dataname + "_time.csv"))
+        save_csv = os.path.join(os.path.dirname(__file__), "..", "result", "HGNN_" + setting.dataname + "_time.csv")
 
         lst = ['epoch', 'train_time', 'test_time', 'accuracy']
         pd.DataFrame(columns=lst).to_csv(save_csv, index=False)

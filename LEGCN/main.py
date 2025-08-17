@@ -14,7 +14,6 @@ from utils import load_data, accuracy
 from models import GCN, SpGAT, GAT
 
 
-# 设置默认参数
 def set_default_args():
     class Args:
         def __init__(self):
@@ -27,12 +26,11 @@ def set_default_args():
             self.hidden = 256
             self.dropout = 0.5
             self.modelType = 0
-            self.dataset = None  # 默认为None，表示处理所有数据集
+            self.dataset = None
 
     return Args()
 
 
-# 获取命令行参数并合并默认参数
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=2025, help='Random seed.')
@@ -47,7 +45,6 @@ def get_args():
     parser.add_argument('--dataset', type=str, default=None, help='Name of dataset, or "all" to process all datasets')
     parser.add_argument('--gpu', type=int, default=-1, help='GPU id to use, -1 for CPU')
 
-    # 获取命令行参数
     cmd_args = parser.parse_args()
     return cmd_args
 
@@ -61,7 +58,6 @@ def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimize
     optimizer.zero_grad()
     output,x = model(features, adj, PvT)
 
-    # 确保索引是整数类型
     idx_train = idx_train.to(torch.long)
     idx_val = idx_val.to(torch.long)
 
@@ -77,8 +73,6 @@ def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimize
     optimizer.step()
 
     if not args.fastmode:
-        # Evaluate validation set performance separately,
-        # deactivates dropout during validation run.
         model.eval()
         output,x = model(features, adj, PvT)
     loss_val = F.nll_loss(output[idx_val], labels[idx_val])
@@ -94,12 +88,10 @@ def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimize
 
 def test(model, features, adj, PvT, labels, idx_test, dataset_name):
     model.eval()
-    output = model(features, adj, PvT)
+    output, x = model(features, adj, PvT)
 
-    # 确保索引是整数类型
     idx_test = idx_test.to(torch.long)
 
-    # 计算测试集的损失和准确率
     loss_test = F.nll_loss(output[idx_test], labels[idx_test])
     acc_test = accuracy(output[idx_test], labels[idx_test])
     print("Test set results:",
@@ -108,12 +100,9 @@ def test(model, features, adj, PvT, labels, idx_test, dataset_name):
     return acc_test.item(), loss_test.item()
 
 
-# 保存结果到CSV文件
 def save_results_to_csv(results, file_path):
-    # 确保目录存在
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-    # 写入CSV文件
     with open(file_path, 'w', newline='') as csvfile:
         fieldnames = ['dataset', 'accuracy', 'loss', 'time']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -123,12 +112,10 @@ def save_results_to_csv(results, file_path):
             writer.writerow(result)
 
 
-# 处理单个数据集
 def process_dataset(dataset_path):
     dataset_name = os.path.basename(dataset_path).split('.')[0]
     print(f"\n处理数据集: {dataset_name}")
 
-    # 加载数据
     device = torch.device("cuda" if args.gpu >= 0 else "cpu")
     H, Y, X, labels, idx_train, idx_val, idx_test = load_data(dataset_name)
     print(f"转换后标签形状: {labels.shape}, 类别数: {np.unique(labels).size}")
@@ -141,29 +128,23 @@ def process_dataset(dataset_path):
 
     adj = normalize(adj + 2.0 * sp.eye(adj.shape[0]))
 
-    # 创建PyTorch张量
     features = torch.FloatTensor(np.array(Pv @ X.todense())).to(device)
     labels = torch.LongTensor(np.where(labels)[1]).to(device)
     PvT = sparse_mx_to_torch_sparse_tensor(PvT).to(device)
 
-    # 正确分配索引集 - 确保是一维整数张量
     idx_train = torch.LongTensor(idx_train[0].astype(np.int64)).flatten().to(device)
     idx_val = torch.LongTensor(idx_val[0].astype(np.int64)).flatten().to(device)
     idx_test = torch.LongTensor(idx_test[0].astype(np.int64)).flatten().to(device)
 
-    # 将邻接矩阵转换为稠密张量
     adj = torch.FloatTensor(adj.toarray()).to(device)
 
-    # 打印调试信息
     print(f"特征矩阵形状: {features.shape}")
     print(f"邻接矩阵形状: {adj.shape}")
     print(f"训练集大小: {len(idx_train)}, 验证集大小: {len(idx_val)}, 测试集大小: {len(idx_test)}")
 
-    # 计算类别数
     n_classes = int(labels.max().item() - labels.min().item() + 1)
     print(f"模型将使用 {n_classes} 个输出类别")
 
-    # 模型定义
     if args.modelType == 0:
         model = GCN(nfeat=features.shape[1],
                     nhid=args.hidden,
@@ -180,18 +161,15 @@ def process_dataset(dataset_path):
                     nclass=n_classes,
                     dropout=args.dropout)
 
-    # 设置随机种子
     torch.manual_seed(args.seed)
     if device.type == 'cuda':
         torch.cuda.manual_seed(args.seed)
 
     model.to(device)
 
-    # 优化器
     optimizer = optim.Adam(model.parameters(),
                            lr=args.lr, weight_decay=args.weight_decay)
 
-    # 训练模型
     tic = time.time()
     for epoch in range(args.epochs):
         train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimizer)
@@ -200,7 +178,6 @@ def process_dataset(dataset_path):
     print("Optimization Finished!")
     print(f"总耗时: {total_time:.4f}s")
 
-    # 测试模型
     acc_test, loss_test = test(model, features, adj, PvT, labels, idx_test, dataset_name)
 
     return {
@@ -211,32 +188,24 @@ def process_dataset(dataset_path):
     }
 
 
-# 获取要处理的数据集
 if args.dataset == 'all' or args.dataset is None:
-    # 获取所有mat文件路径
     dataset_paths = load_data(dataset_str='all')
 else:
-    # 只处理指定数据集
     dataset_paths = [os.path.join(os.path.dirname(__file__), '..', 'data', f'{args.dataset}.mat')]
 
-# 确保结果目录存在
 result_dir = os.path.join(os.path.dirname(__file__), '..', 'result')
 os.makedirs(result_dir, exist_ok=True)
 
-# 存储所有结果
 results = []
 
-# 串行处理每个数据集
 for dataset_path in dataset_paths:
     result = process_dataset(dataset_path)
     results.append(result)
 
-# 保存结果到CSV文件
 csv_file_path = os.path.join(result_dir, 'legcn_results.csv')
 save_results_to_csv(results, csv_file_path)
 print(f"所有结果已保存到: {csv_file_path}")
 
-# 打印所有结果摘要
 print("\n结果摘要:")
 for result in results:
     print(

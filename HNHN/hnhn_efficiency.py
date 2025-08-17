@@ -1,5 +1,4 @@
 import pandas as pd
-
 import _init_paths
 import torch
 import torch.nn as nn
@@ -7,7 +6,6 @@ import numpy as np
 from torch.nn import Parameter
 import torch.optim as optim
 import torch.nn.functional as F
-import torch.optim as optim
 import utils
 import math
 from sklearn.decomposition import TruncatedSVD
@@ -19,8 +17,6 @@ import random
 import pdb
 import scipy.sparse as sp
 import scipy.io as scio
-
-
 def normalize_features(mx):
     rowsum = np.array(mx.sum(1))
     if np.where(rowsum == 0)[0].shape[0] != 0:
@@ -32,8 +28,6 @@ def normalize_features(mx):
     r_mat_inv = sp.diags(r_inv)
     mx = r_mat_inv.dot(mx)
     return mx
-
-
 def seed_everything(seed=616):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -43,10 +37,7 @@ def seed_everything(seed=616):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-
 class HyperMod(nn.Module):
-
     def __init__(self, input_dim, vidx, eidx, nv, ne, v_weight, e_weight, args, is_last=False, use_edge_lin=False):
         super(HyperMod, self).__init__()
         self.args = args
@@ -66,7 +57,6 @@ class HyperMod(nn.Module):
             self.edge_lin = torch.nn.Linear(args.n_hidden, args.final_edge_dim)
 
     def forward(self, v, e):
-
         if args.edge_linear:
             ve = torch.matmul(v, self.W_v2e) + self.b_v
         else:
@@ -120,10 +110,7 @@ class HyperMod(nn.Module):
             v2 = self.edge_lin(v2)
             v = torch.cat([v, v2], -1)
         return v, e
-
-
 class Hypergraph(nn.Module):
-
     def __init__(self, vidx, eidx, nv, ne, v_weight, e_weight, args):
         super(Hypergraph, self).__init__()
         self.args = args
@@ -163,12 +150,9 @@ class Hypergraph(nn.Module):
 
         pred = self.cls(v)
         return v, e, pred
-
-
 class Hypertrain:
     def __init__(self, args):
         self.loss_fn = nn.CrossEntropyLoss()
-
         self.hypergraph = Hypergraph(args.vidx, args.eidx, args.nv, args.ne, args.v_weight, args.e_weight, args)
         self.optim = optim.Adam(self.hypergraph.all_params(), lr=.01, weight_decay=1e-4)
         self.args = args
@@ -201,7 +185,6 @@ class Hypertrain:
         return pred_all, loss, best_err, acc, time_list
 
     def eval(self, all_pred):
-
         if self.args.val_idx is None:
             ones = torch.ones(len(all_pred))
             ones[self.args.label_idx] = -1
@@ -221,8 +204,6 @@ class Hypertrain:
         if args.verbose:
             print('acc:{}'.format(acc))
         return 1 - acc, acc
-
-
 def train(args, s=616):
     seed_everything(seed=s)
     args.e = torch.zeros(args.ne, args.n_hidden).to(device)
@@ -232,8 +213,6 @@ def train(args, s=616):
     print(2)
     print(time_list)
     return test_err, acc, time_list
-
-
 def gen_data_cora(args, dataset_name='citeseer', trail=0):
     data_mat = scio.loadmat("../Hypergraph_datasets/{}.mat".format(dataset_name))
     h = data_mat['h']
@@ -247,7 +226,6 @@ def gen_data_cora(args, dataset_name='citeseer', trail=0):
     labels = np.array([np.argmax(i) for i in labels])
 
     num_edge = h.shape[1]
-
     num_vertex = h.shape[0]
 
     x = X
@@ -255,7 +233,6 @@ def gen_data_cora(args, dataset_name='citeseer', trail=0):
 
     a, b, c = sp.find(h)
     ver2edg = np.dstack((a, b))
-
     edge2ver = np.dstack((b, a))
 
     h = h.todense()
@@ -270,14 +247,12 @@ def gen_data_cora(args, dataset_name='citeseer', trail=0):
 
     ver2edg = ver2edg.tolist()
     ver2edg = sum(ver2edg, [])
-
     edge2ver = edge2ver.tolist()
     edge2ver = sum(edge2ver, [])
 
     ver2edg = torch.LongTensor(ver2edg).to(device)
 
     cls_l = list(set(labels))
-
     cls2int = {k: i for (i, k) in enumerate(cls_l)}
     labels = [cls2int[c] for c in labels]
     args.input_dim = x.shape[-1]
@@ -291,9 +266,7 @@ def gen_data_cora(args, dataset_name='citeseer', trail=0):
     args.n_cls = len(cls_l)
 
     args.all_labels = torch.LongTensor(labels)
-
     args.label_idx = idx_train[trail] - 1
-
     args.val_idx = idx_test[trail] - 1
 
     args.labels = args.all_labels[args.label_idx.astype(float)].to(device)
@@ -340,16 +313,13 @@ def gen_data_cora(args, dataset_name='citeseer', trail=0):
     args.v_reg_weight = torch.Tensor(v_reg_weight).unsqueeze(-1).to(device)
     args.e_reg_sum = torch.Tensor(e_reg_sum).unsqueeze(-1).to(device)
     return args
-
-
 def start_trail(dataset_name, args):
     acc_list = np.zeros((1000, 1))
-
     args.alpha_v = 0.1
     args.alpha_e = 0.1
     lst = ['time_list']
 
-    save_csv = './result/HNHN_' + dataset_name + "_efficiency.csv"
+    save_csv = '../result/HNHN_' + dataset_name + "_efficiency.csv"
 
     pd.DataFrame(columns=lst).to_csv(save_csv, index=False)
 
@@ -358,11 +328,10 @@ def start_trail(dataset_name, args):
         args = gen_data_cora(args, dataset_name=dataset_name, trail=trial)
         test_err, acc, time_list = train(args)
 
-        scio.savemat('Hnhn_efficiency.mat',{'time_list':time_list})
+        scio.savemat('../result/Hnhn_efficiency.mat',{'time_list':time_list})
         trials = np.arange(200)
         result = pd.DataFrame({'trial': trials, 'time_list': time_list})
         result.to_csv(save_csv, index=False)
-
 if __name__ == '__main__':
     args = utils.parse_args()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_id
