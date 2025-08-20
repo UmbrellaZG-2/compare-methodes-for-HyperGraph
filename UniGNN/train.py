@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.optim import optimizer
 import os
 import scipy.sparse as sp
+import csv
 
 import numpy as np
 import time
@@ -14,8 +15,26 @@ import random
 import config
 from pathlib import Path
 
-args = config.parse()
+# 结果保存函数
+def save_results_to_csv(result, file_path):
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
+    # 检查文件是否存在
+    file_exists = os.path.isfile(file_path)
+
+    with open(file_path, 'a', newline='') as csvfile:
+        fieldnames = ['accuracy', 'loss', 'time']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        # 如果文件不存在，写入表头
+        if not file_exists:
+            writer.writeheader()
+
+        # 移除dataset字段，因为文件名已包含数据集信息
+        result_without_dataset = {k: v for k, v in result.items() if k != 'dataset'}
+        writer.writerow(result_without_dataset)
+
+args = config.parse()
 
 def fix_seed(seed):
     torch.manual_seed(seed)
@@ -49,17 +68,12 @@ test_idx = torch.LongTensor(test_index_list.astype(np.int64)).cuda()
 print("数据加载完成!")
 Y = torch.LongTensor(np.where(labels)[1].astype(np.int64)).cuda()
 X = torch.from_numpy(X.toarray()).float().cuda()
-lst = ['trial', 'test_acc']
 result_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "result"))
 os.makedirs(result_dir, exist_ok=True)
 
-if args.model_name in ['UniGCN', 'UniGAT'] and args.add_self_loop:
-    save_path = os.path.join(result_dir, f"{args.dataset}_{args.model_name}_self_loop.csv")
-else:
-    save_path = os.path.join(result_dir, f"{args.dataset}_{args.model_name}.csv")
-
-if not os.path.exists(save_path):
-    pd.DataFrame(columns=lst).to_csv(save_path, index=False)
+# 统一使用{方法名+数据集名}的格式命名文件
+method_name = 'UniGNN'
+save_path = os.path.join(result_dir, f"{method_name}_{args.dataset}.csv")
 
 for run in range(1):
     out_dir = Path(args.out_dir)
@@ -102,10 +116,20 @@ for run in range(1):
 
         best_test_acc = max(best_test_acc, test_acc)
 
-    print(f"Run {run}/{train_idx_list.shape[0]}, best test accuracy: {best_test_acc:.2f}, acc(last): {test_acc:.2f}, total time: {time.time()-tic_run:.2f}s")
+    total_run_time = time.time() - tic_run
+    print(f"Run {run}/{train_idx_list.shape[0]}, best test accuracy: {best_test_acc:.2f}, acc(last): {test_acc:.2f}, total time: {total_run_time:.2f}s")
 
-    result = [run, best_test_acc]
-    pd.DataFrame([result]).to_csv(save_path, index=False, mode='a+', header=False)
+    # 构建结果字典
+    result = {
+        'accuracy': best_test_acc,
+        'loss': 0,  # 这里可以根据实际情况计算loss
+        'time': total_run_time,
+        'dataset': args.dataset
+    }
+    
+    # 使用save_results_to_csv函数保存结果
+    save_results_to_csv(result, save_path)
+    
     test_accs.append(test_acc)
     best_test_accs.append(best_test_acc)
 

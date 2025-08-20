@@ -24,7 +24,7 @@ os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 device = torch.cuda.current_device()
 
 
-def _main(fts, n_class, idx_train, idx_test, H, lbls):
+def _main(fts, n_class, idx_train, idx_test, H, lbls, save_csv, total_start_time):
     model_ft = HGNN(in_ch=fts.shape[1],
                     n_class=n_class,
                     n_hid=128,
@@ -39,13 +39,21 @@ def _main(fts, n_class, idx_train, idx_test, H, lbls):
     criterion = nn.BCELoss()
 
     model_ft, result_test = train_model(model_ft, criterion, optimizer, schedular, idx_train, idx_test, fts, H, lbls,
-                                        200, print_freq=100)
+                                        200, print_freq=100, save_csv=save_csv)
+
+    # 记录总时间结束
+    total_end_time = time.time()
+    total_time = total_end_time - total_start_time
+    print(f"Total time from data loading to result saving: {total_time:.4f} seconds")
+    # 将总时间写入CSV文件
+    with open(save_csv, 'a') as f:
+        f.write(f"Total time,{total_time:.4f}\n")
 
     return result_test
 
 
 def train_model(model, criterion, optimizer, scheduler, idx_train, idx_test, fts, H, lbls, num_epochs=25,
-                print_freq=300):
+                print_freq=300, save_csv=None):
     since = time.time()
 
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -97,6 +105,9 @@ def train_model(model, criterion, optimizer, scheduler, idx_train, idx_test, fts
 
 if __name__ == '__main__':
 
+    # 开始记录总时间
+    total_start_time = time.time()
+
     h, X, labels, idx_train_list, idx_val_list = load_data(setting.dataname)
     H = h.toarray()
     fts = X.toarray()
@@ -119,11 +130,11 @@ if __name__ == '__main__':
         idx_train = torch.Tensor(idx_train.astype(np.int64)).long().to(device)
         idx_test = torch.Tensor(idx_test.astype(np.int64)).long().to(device)
 
-        save_csv = os.path.join(os.path.dirname(__file__), "..", "result", "HGNN_" + setting.dataname + "_time.csv")
+        save_csv = os.path.join(os.path.dirname(__file__), "result", setting.dataname + "_time_hgnn.csv")
 
         lst = ['epoch', 'train_time', 'test_time', 'accuracy']
         pd.DataFrame(columns=lst).to_csv(save_csv, index=False)
-        acc_test = _main(fts, n_class, idx_train, idx_test, G, lbls)
+        acc_test = _main(fts, n_class, idx_train, idx_test, G, lbls, save_csv, total_start_time)
         accuracy_list.append(acc_test)
 
         print(f"Trial {trial + 1} accuracy: {acc_test}")

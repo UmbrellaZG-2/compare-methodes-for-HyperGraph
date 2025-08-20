@@ -164,7 +164,6 @@ class Hypertrain:
         best_err = sys.maxsize
         time_list = []
         for i in range(self.args.n_epoch):
-            print(i)
             start = time.time()
             args.cur_epoch = i
             v, e, pred_all = self.hypergraph(v_init, e_init)
@@ -180,7 +179,6 @@ class Hypertrain:
             self.optim.step()
             t = time.time() - start
             time_list.append(t)
-        print(11)
         e_loss = self.eval(pred_all)
         return pred_all, loss, best_err, acc, time_list
 
@@ -208,18 +206,15 @@ def train(args, s=616):
     seed_everything(seed=s)
     args.e = torch.zeros(args.ne, args.n_hidden).to(device)
     hypertrain = Hypertrain(args)
-    print(1)
     pred_all, loss, test_err, acc, time_list = hypertrain.train(args.v, args.e, args.label_idx, args.labels)
-    print(2)
-    print(time_list)
     return test_err, acc, time_list
 def gen_data_cora(args, dataset_name='citeseer', trail=0):
-    data_mat = scio.loadmat("../Hypergraph_datasets/{}.mat".format(dataset_name))
-    h = data_mat['h']
-    X = data_mat['X']
+    data_mat = scio.loadmat(os.path.join("..", "data", "{}.mat").format(dataset_name))
+    h = data_mat['H']
+    X = data_mat['X0']
     labels = data_mat['labels']
-    idx_train = data_mat['idx_train_list']
-    idx_test = data_mat['idx_val_list']
+    idx_train = data_mat['idx_train']
+    idx_test = data_mat['idx_test']
 
     X = normalize_features(X)
 
@@ -317,21 +312,35 @@ def start_trail(dataset_name, args):
     acc_list = np.zeros((1000, 1))
     args.alpha_v = 0.1
     args.alpha_e = 0.1
-    lst = ['time_list']
+    lst = ['trial', 'accuracy', 'total_time']
 
-    save_csv = '../result/HNHN_' + dataset_name + "_efficiency.csv"
+    # 统一使用{方法名+数据集名}的格式命名文件
+    method_name = 'HNHN'
+    result_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "result"))
+    os.makedirs(result_dir, exist_ok=True)
+    save_csv = os.path.join(result_dir, f"{method_name}_{dataset_name}.csv")
 
-    pd.DataFrame(columns=lst).to_csv(save_csv, index=False)
+    # 检查文件是否存在，如果不存在则创建并写入表头
+    if not os.path.exists(save_csv):
+        pd.DataFrame(columns=lst).to_csv(save_csv, index=False)
 
     for trial in range(1):
-        print('trail {}'.format(trial))
         args = gen_data_cora(args, dataset_name=dataset_name, trail=trial)
+        
+        # 记录整个trial的开始时间
+        trial_start_time = time.time()
+        
         test_err, acc, time_list = train(args)
-
-        scio.savemat('../result/Hnhn_efficiency.mat',{'time_list':time_list})
-        trials = np.arange(200)
-        result = pd.DataFrame({'trial': trials, 'time_list': time_list})
-        result.to_csv(save_csv, index=False)
+        
+        # 计算整个trial的总运行时间
+        total_trial_time = time.time() - trial_start_time
+        
+        # 只记录当前trial的汇总数据
+        result_data = {'trial': [trial], 'accuracy': [acc], 'total_time': [total_trial_time]}
+        result = pd.DataFrame(result_data)
+        
+        # 使用追加模式写入CSV文件
+        result.to_csv(save_csv, index=False, mode='a', header=False)
 if __name__ == '__main__':
     args = utils.parse_args()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_id

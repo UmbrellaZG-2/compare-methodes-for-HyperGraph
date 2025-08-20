@@ -149,10 +149,6 @@ if __name__ == '__main__':
 
         test, total_time, time_list = training(data, args, s=seed)
         acc_test.append(test)
-        
-        # 保存时间信息到mat文件
-        time_mat_path = os.path.join(result_dir, f"HCoN_{setting.dataname}_time.mat")
-        scio.savemat(time_mat_path, {'time_list': time_list, 'total_time': total_time})
 
         
     # 保存结果到公共result文件夹

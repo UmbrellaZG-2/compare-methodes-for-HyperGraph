@@ -25,7 +25,7 @@ projects = [
     },
     {
         "name": "HNHN",
-        "script": "run_HNHN.py",
+        "script": "hnhn_efficiency.py",
         "param_name": "--dataset_name",
         "gpu_param": "--gpu"
     },

@@ -100,16 +100,23 @@ def test(model, features, adj, PvT, labels, idx_test, dataset_name):
     return acc_test.item(), loss_test.item()
 
 
-def save_results_to_csv(results, file_path):
+def save_results_to_csv(result, file_path):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-    with open(file_path, 'w', newline='') as csvfile:
-        fieldnames = ['dataset', 'accuracy', 'loss', 'time']
+    # 检查文件是否存在
+    file_exists = os.path.isfile(file_path)
+
+    with open(file_path, 'a', newline='') as csvfile:
+        fieldnames = ['accuracy', 'loss', 'time']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-        writer.writeheader()
-        for result in results:
-            writer.writerow(result)
+        # 如果文件不存在，写入表头
+        if not file_exists:
+            writer.writeheader()
+
+        # 移除dataset字段，因为文件名已包含数据集信息
+        result_without_dataset = {k: v for k, v in result.items() if k != 'dataset'}
+        writer.writerow(result_without_dataset)
 
 
 def process_dataset(dataset_path):
@@ -196,17 +203,12 @@ else:
 result_dir = os.path.join(os.path.dirname(__file__), '..', 'result')
 os.makedirs(result_dir, exist_ok=True)
 
-results = []
-
 for dataset_path in dataset_paths:
     result = process_dataset(dataset_path)
-    results.append(result)
+    dataset_name = result['dataset']
+    csv_file_path = os.path.join(result_dir, f'LEGCN_{dataset_name}.csv')
+    save_results_to_csv(result, csv_file_path)
+    print(f"数据集 {dataset_name} 的结果已保存到: {csv_file_path}")
 
-csv_file_path = os.path.join(result_dir, 'legcn_results.csv')
-save_results_to_csv(results, csv_file_path)
-print(f"所有结果已保存到: {csv_file_path}")
-
-print("\n结果摘要:")
-for result in results:
-    print(
-        f"数据集: {result['dataset']}, 准确率: {result['accuracy']:.4f}, 损失: {result['loss']:.4f}, 时间: {result['time']:.4f}s")
+    print("\n结果摘要:")
+    print(f"数据集: {result['dataset']}, 准确率: {result['accuracy']:.4f}, 损失: {result['loss']:.4f}, 时间: {result['time']:.4f}s")
