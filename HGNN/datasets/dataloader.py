@@ -37,6 +37,7 @@ def load_data(dataset_str=None):
     labels = data_mat.get('labels')
     idx_train_list = data_mat.get('idx_train', data_mat.get('idx_train_list'))
     idx_test_list = data_mat.get('idx_test', data_mat.get('idx_test_list'))
+    idx_pick = data_mat.get('idx_pick')
     
     if h is None or X is None or labels is None or idx_train_list is None or idx_test_list is None:
         raise ValueError(f"数据文件{data_file}中缺少必要的键")
@@ -48,4 +49,4 @@ def load_data(dataset_str=None):
     
     X = normalize_features(X)
     
-    return h, X, labels, idx_train_list, idx_test_list
+    return h, X, labels, idx_train_list, idx_test_list,idx_pick

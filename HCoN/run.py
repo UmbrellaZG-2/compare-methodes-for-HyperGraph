@@ -83,7 +83,7 @@ if __name__ == '__main__':
     os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
     device = torch.cuda.current_device()
     
-    H, X, Y, labels, idx_train_list, idx_test_list = load_data(setting.dataname)
+    H, X, Y, labels, idx_train_list, idx_test_list,idx_pick = load_data(setting.dataname)
     
     H_trainX = H.copy()
     Y = np.eye(H.shape[1])
@@ -120,7 +120,7 @@ if __name__ == '__main__':
     
     acc_test = []
     total_times = []
-    for trial in range(idx_train_list.shape[0]):
+    for trial in range(idx_pick.shape[0]):
         idx_train = idx_train_list[trial]
         idx_test = idx_test_list[trial]
         data = dotdict()

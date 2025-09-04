@@ -96,7 +96,7 @@ def train_model(model, criterion, optimizer, scheduler, idx_train, idx_test, fts
 
 if __name__ == '__main__':
 
-    h, X, labels, idx_train_list, idx_val_list = load_data(setting.dataname)
+    h, X, labels, idx_train_list, idx_val_list, idx_pick = load_data(setting.dataname)
     
     H = h.toarray()
     fts = X.toarray()
@@ -119,7 +119,7 @@ if __name__ == '__main__':
     if not os.path.exists(save_csv):
         pd.DataFrame(columns=lst).to_csv(save_csv, index=False)
 
-    for trial in range(idx_train_list.shape[0]):
+    for trial in range(idx_pick.shape[0]):
         # 开始记录当前trial的时间
         trial_start_time = time.time()
 
