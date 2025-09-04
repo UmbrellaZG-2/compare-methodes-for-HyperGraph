@@ -23,16 +23,20 @@ def save_results_to_csv(result, file_path):
     file_exists = os.path.isfile(file_path)
 
     with open(file_path, 'a', newline='') as csvfile:
-        fieldnames = ['accuracy', 'loss', 'time']
+        fieldnames = ['trial', 'accuracy', 'total_time']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         # 如果文件不存在，写入表头
         if not file_exists:
             writer.writeheader()
 
-        # 移除dataset字段，因为文件名已包含数据集信息
-        result_without_dataset = {k: v for k, v in result.items() if k != 'dataset'}
-        writer.writerow(result_without_dataset)
+        # 构建要写入的数据，确保字段匹配
+        row_data = {
+            'trial': result['trial'] + 1,  # trial从1开始计数
+            'accuracy': result['accuracy'],
+            'total_time': result['time']  # 将time改为total_time
+        }
+        writer.writerow(row_data)
 
 args = config.parse()
 
@@ -75,45 +79,30 @@ os.makedirs(result_dir, exist_ok=True)
 method_name = 'UniGNN'
 save_path = os.path.join(result_dir, f"{method_name}_{args.dataset}.csv")
 
-for run in range(1):
-    out_dir = Path(args.out_dir)
-    run_dir = out_dir / f'{run}'
-    run_dir.mkdir(parents=True, exist_ok=True)
-
-    args.split = run
-    train_idx = train_idx[run]
-    test_idx = test_idx[run]
-
+for run in range(train_idx.shape[0]):
+    train_idx_run = train_idx[run]
+    test_idx_run = test_idx[run]
 
     model, optimizer = initialise(X, Y, G, args)
 
-
     print(f'Run {run}/{args.n_runs}, Total Epochs: {args.epochs}')
-    print(model)
     print(f'total_params:{sum(p.numel() for p in model.parameters() if p.requires_grad)}')
 
     tic_run = time.time()
 
     best_test_acc, test_acc, Z = 0, 0, None    
     for epoch in range(args.epochs):
-        tic_epoch = time.time()
         model.train()
-
         optimizer.zero_grad()
         Z = model(X)
-        loss = F.nll_loss(Z[train_idx], Y[train_idx])
-
+        loss = F.nll_loss(Z[train_idx_run], Y[train_idx_run])
         loss.backward()
         optimizer.step()
-
-        train_time = time.time() - tic_epoch 
-        
         
         model.eval()
         Z = model(X)
-        train_acc = accuracy(Z[train_idx], Y[train_idx])
-        test_acc = accuracy(Z[test_idx], Y[test_idx])
-
+        train_acc = accuracy(Z[train_idx_run], Y[train_idx_run])
+        test_acc = accuracy(Z[test_idx_run], Y[test_idx_run])
         best_test_acc = max(best_test_acc, test_acc)
 
     total_run_time = time.time() - tic_run
@@ -121,10 +110,10 @@ for run in range(1):
 
     # 构建结果字典
     result = {
+        'trial': run,
         'accuracy': best_test_acc,
         'loss': 0,  # 这里可以根据实际情况计算loss
         'time': total_run_time,
-        'dataset': args.dataset
     }
     
     # 使用save_results_to_csv函数保存结果

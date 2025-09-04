@@ -10,7 +10,7 @@ def load_data(dataset_str):
     h = data_mat['H']
     X = data_mat['X0']
     labels = data_mat['labels']
-    idx_train_list = data_mat['idx_train']-1
+    idx_train_list = np.maximum(data_mat['idx_train']-1, 0)
     idx_test_list = data_mat['idx_test']-1
 
     X = normalize_features(X)

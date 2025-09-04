@@ -178,31 +178,48 @@ class Hypertrain:
         v_init = v
         e_init = e
         best_err = sys.maxsize
+        
+        # 计算训练准确率
+        train_err, train_acc = self.eval(pred_all, 'train')
+        best_train_acc = train_acc
+        
         for i in range(self.args.n_epoch):
             args.cur_epoch = i
             v, e, pred_all = self.hypergraph(v_init, e_init)
             pred = pred_all[label_idx.astype(float)]
             loss = self.loss_fn(pred, labels)
-            test_err, acc = self.eval(pred_all)
+            test_err, test_acc = self.eval(pred_all, 'test')
             if test_err < best_err:
                 best_err = test_err
+            
+            # 计算当前epoch的训练准确率
+            train_err, train_acc = self.eval(pred_all, 'train')
+            if train_acc > best_train_acc:
+                best_train_acc = train_acc
+                
             self.optim.zero_grad()
             loss.backward()
             self.optim.step()
 
-        e_loss = self.eval(pred_all)
-        return pred_all, loss, best_err, acc
+        test_err, test_acc = self.eval(pred_all, 'test')
+        return pred_all, loss, test_acc, best_train_acc
 
-    def eval(self, all_pred):
-
-        if self.args.val_idx is None:
-            ones = torch.ones(len(all_pred))
-            ones[self.args.label_idx] = -1
+    def eval(self, all_pred, phase='test'):
+        if phase == 'test':
+            # 测试集评估
+            if self.args.val_idx is None:
+                ones = torch.ones(len(all_pred))
+                ones[self.args.label_idx] = -1
+            else:
+                ones = -torch.ones(len(all_pred))
+                ones[self.args.val_idx.astype(float)] = 1
         else:
-            ones = -torch.ones(len(all_pred))
-            ones[self.args.val_idx.astype(float)] = 1
+            # 训练集评估
+            ones = torch.ones(len(all_pred))
+            ones[self.args.label_idx] = 1
+            ones[~torch.isin(torch.arange(len(all_pred)), self.args.label_idx)] = -1
 
-        tgt = self.args.all_labels
+        tgt = self.args.all_labels.clone()
         tgt[ones == -1] = -1
         fn = nn.CrossEntropyLoss(ignore_index=-1)
         loss = fn(all_pred, tgt)
@@ -219,8 +236,8 @@ def train(args, s=616):
     args.e = torch.zeros(args.ne, args.n_hidden).to(device)
     hypertrain = Hypertrain(args)
 
-    pred_all, loss, test_err, acc = hypertrain.train(args.v, args.e, args.label_idx, args.labels)
-    return test_err, acc
+    pred_all, loss, test_acc, train_acc = hypertrain.train(args.v, args.e, args.label_idx, args.labels)
+    return test_acc, train_acc
 
 
 def gen_data_cora(args, dataset_name, trail=0):
@@ -282,7 +299,6 @@ def gen_data_cora(args, dataset_name, trail=0):
 
     args.labels = args.all_labels[args.label_idx.astype(float)].to(device)
     args.all_labels = args.all_labels.to(device)
-
     if isinstance(x, np.ndarray):
         args.v = torch.from_numpy(x.astype(np.float32)).to(device)
     else:
@@ -327,25 +343,44 @@ def gen_data_cora(args, dataset_name, trail=0):
 
 
 def start_trail(dataset_name, args):
-    acc_list = np.zeros((1, 1))
+    # 先加载数据以获取trial数量
+    h, X, labels, idx_train, idx_test = load_data(dataset_name)
+    trials = idx_train.shape[0]
+    test_acc_list = []
+    train_acc_list = []
+    time_list = []
+    save_csv = os.path.join(os.path.dirname(__file__), "result", "HNHN_" + dataset_name + ".csv")
+    lst = ['trial', 'test_accuracy', 'train_accuracy', 'time']
+    # 检查文件是否存在，如果不存在则创建并写入表头
+    if not os.path.exists(save_csv):
+        pd.DataFrame(columns=lst).to_csv(save_csv, index=False)
 
-    args.alpha_v = 0.1
-    args.alpha_e = 0.1
-
-    for trial in range(1):
+    for trial in range(trials):
         args = gen_data_cora(args, dataset_name=dataset_name, trail=trial)
-        test_err, acc = train(args)
-        acc_list[trial] = acc * 100
-        m_acc = np.mean(acc_list)
-        print(f'Completed {trial + 1}/1 trials, current accuracy: {acc:.4f}')
-    result_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'result', 'HNHN_' + dataset_name + '.csv'))
-    df = pd.DataFrame({
-        'trial': range(1, len(acc_list) + 1),
-        'accuracy': acc_list.flatten(),
-        'mean_accuracy': [m_acc] * len(acc_list)
-    })
-    df.to_csv(result_path, index=False)
-    print(f'HNHN_{dataset_name} 平均准确率: {m_acc:.4f}')
+        
+        start_time = time.time()
+        test_acc, train_acc = train(args)
+        end_time = time.time()
+        trial_time = end_time - start_time
+
+        test_acc_list.append(test_acc)
+        train_acc_list.append(train_acc)
+        time_list.append(trial_time)
+
+        # 将当前trial的数据写入CSV文件
+        result_data = {'trial': [trial + 1], 'time': [trial_time], 'test_accuracy': [test_acc * 100], 'train_accuracy': [train_acc * 100]}  # 准确率转换为百分比
+        result = pd.DataFrame(result_data)
+        result.to_csv(save_csv, index=False, mode='a', header=False)
+
+        print(f"Trial {trial + 1} test_acc: {test_acc * 100:.2f}%, train_acc: {train_acc * 100:.2f}%, time: {trial_time:.4f} seconds")
+
+    # 计算并打印平均准确率
+    avg_test_accuracy = np.mean(test_acc_list)
+    avg_train_accuracy = np.mean(train_acc_list)
+    avg_time = np.mean(time_list)
+    print(f"Average test accuracy over {trials} trials: {avg_test_accuracy * 100:.4f}%")
+    print(f"Average train accuracy over {trials} trials: {avg_train_accuracy * 100:.4f}%")
+    print(f"HNHN_{dataset_name} 平均时间: {avg_time:.2f}s")
 
 
 def parse_args():

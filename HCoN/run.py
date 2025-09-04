@@ -84,7 +84,7 @@ if __name__ == '__main__':
     device = torch.cuda.current_device()
     
     H, X, Y, labels, idx_train_list, idx_test_list = load_data(setting.dataname)
-        
+    
     H_trainX = H.copy()
     Y = np.eye(H.shape[1])
     hx1, hx2 = normalize_sparse_hypergraph_symmetric(H_trainX)
@@ -119,10 +119,10 @@ if __name__ == '__main__':
         os.makedirs(result_dir)
     
     acc_test = []
-    for trial in range(599,600):
+    total_times = []
+    for trial in range(idx_train_list.shape[0]):
         idx_train = idx_train_list[trial]
         idx_test = idx_test_list[trial]
-    
         data = dotdict()
         args = dotdict()
 
@@ -149,21 +149,20 @@ if __name__ == '__main__':
 
         test, total_time, time_list = training(data, args, s=seed)
         acc_test.append(test)
+        total_times.append(total_time)
 
-        
+    
     # 保存结果到公共result文件夹
     acc_test = np.array(acc_test) * 100
     m_acc = np.mean(acc_test)
     s_acc = np.std(acc_test)
     # 构建完整的结果文件路径，格式为：项目名+数据集名
     result_path = os.path.join(result_dir, f"HCoN_{setting.dataname}.csv")
-    # 只保存最后一个trial的结果
+    # 保存所有trial的结果
     df = pd.DataFrame({
-        'trial': [trial + 1],
-        'accuracy': [acc_test[-1]],
-        'mean_accuracy': [m_acc],
-        'std_accuracy': [s_acc],
-        'total_time': [total_time]  # 添加总时间列
+        'trial': list(range(1, len(acc_test) + 1)),
+        'accuracy': acc_test,
+        'total_time': total_times
     })
     df.to_csv(result_path, index=False)
     

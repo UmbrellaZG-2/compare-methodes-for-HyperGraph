@@ -75,7 +75,7 @@ def load_data(dataset_str=None):
     H = data_mat['H']  # 重命名h为adj
     X = data_mat['X0']  # 重命名X为features
     labels = data_mat['labels']
-    idx_train = data_mat['idx_train']-1
+    idx_train = np.maximum(data_mat['idx_train']-1, 0)
     idx_val = data_mat['idx_test']-1
     # 假设测试集与验证集相同，如果有单独的测试集索引可以修改这里
     idx_test = idx_val.copy()
