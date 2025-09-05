@@ -79,7 +79,7 @@ os.makedirs(result_dir, exist_ok=True)
 method_name = 'UniGNN'
 save_path = os.path.join(result_dir, f"{method_name}_{args.dataset}.csv")
 
-for run in range(train_idx.shape[0]):
+for run in range(1):
     train_idx_run = train_idx[run]
     test_idx_run = test_idx[run]
 
@@ -90,22 +90,56 @@ for run in range(train_idx.shape[0]):
 
     tic_run = time.time()
 
+    # 创建详细记录文件
+    detailed_csv_path = os.path.join(result_dir, "detailed", f"UniGNN_{args.dataset}_trial{run+1}_epochs.csv")
+    os.makedirs(os.path.dirname(detailed_csv_path), exist_ok=True)
+    
+    epoch_data = []
+    
     best_test_acc, test_acc, Z = 0, 0, None    
     for epoch in range(args.epochs):
+        epoch_start_time = time.time()
+        
+        # 前向传播
+        forward_start = time.time()
         model.train()
         optimizer.zero_grad()
         Z = model(X)
         loss = F.nll_loss(Z[train_idx_run], Y[train_idx_run])
+        forward_time = time.time() - forward_start
+        
+        # 反向传播
+        backward_start = time.time()
         loss.backward()
         optimizer.step()
+        backward_time = time.time() - backward_start
         
+        # 评估
         model.eval()
         Z = model(X)
         train_acc = accuracy(Z[train_idx_run], Y[train_idx_run])
         test_acc = accuracy(Z[test_idx_run], Y[test_idx_run])
         best_test_acc = max(best_test_acc, test_acc)
+        
+        # 记录epoch总时间
+        total_epoch_time = time.time() - epoch_start_time
+        
+        # 保存epoch详细数据
+        epoch_data.append({
+            'epoch': epoch + 1,
+            'forward_pass_time': forward_time,
+            'loss_calc_time': 0.0,  # 在UniGNN中损失计算时间包含在前向传播中
+            'backward_pass_time': backward_time,
+            'total_epoch_time': total_epoch_time,
+            'train_accuracy': train_acc * 100,
+            'test_accuracy': test_acc * 100
+        })
 
     total_run_time = time.time() - tic_run
+    
+    # 保存详细记录
+    if epoch_data:
+        pd.DataFrame(epoch_data).to_csv(detailed_csv_path, index=False)
     print(f"Run {run}/{train_idx_list.shape[0]}, best test accuracy: {best_test_acc:.2f}, acc(last): {test_acc:.2f}, total time: {total_run_time:.2f}s")
 
     # 构建结果字典

@@ -55,11 +55,10 @@ def load_data(dataset_str=None):
     labels = data_mat['labels']
     idx_train_list = data_mat['idx_train']-1
     idx_val_list = data_mat['idx_test']-1
-    idx_pick = data_mat['idx_pick']
     X = normalize_features(X)
     Y = np.eye(h.shape[1])
     
-    return h, X, Y, labels, idx_train_list, idx_val_list,idx_pick
+    return h, X, Y, labels, idx_train_list, idx_val_list
 
 
 def normalize_features(mx):

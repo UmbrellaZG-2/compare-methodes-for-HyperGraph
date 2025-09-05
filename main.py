@@ -25,22 +25,27 @@ projects = [
     },
     {
         "name": "HNHN",
-        "script": "hnhn_efficiency.py",
+        "script": "run_HNHN.py",
         "param_name": "--dataset_name",
-        "gpu_param": "--gpu"
-    },
-    {
-        "name": "UniGNN",
-        "script": "train.py",
-        "param_name": "--dataset",
-        "extra_params": ["--data", "custom"],
-        "gpu_param": "--gpu"
+        "gpu_param": "--gpu_id"
     },
     {
         "name": "LEGCN",
         "script": "main.py",
         "param_name": "--dataset",
         "gpu_param": "--gpu"
+    },
+    {
+        "name": "UniGNN",
+        "script": "train.py",
+        "param_name": "--dataset",
+        "gpu_param": "--gpu"
+    },
+    {
+        "name": "SCN",
+        "script": "run_ours.py",
+        "param_name": "--dataname",
+        "gpu_param": "--gpu_id"
     }
 ]
 
@@ -49,14 +54,34 @@ result_dir = os.path.abspath("result")
 
 os.makedirs(data_dir, exist_ok=True)
 os.makedirs(result_dir, exist_ok=True)
-data_files = glob.glob(os.path.join(data_dir, "*.mat"))
+
+# 只处理指定的三个数据集
+specified_datasets = [
+        "dblp_co_I",
+        "dblp_co_II",
+        "citation_co_I",
+        "citation_co_II",
+        "acm_co_I",
+        "acm_co_II",
+    ]
+data_files = []
+
+for dataset in specified_datasets:
+    file_path = os.path.join(data_dir, f"{dataset}.mat")
+    if os.path.exists(file_path):
+        data_files.append(file_path)
+    else:
+        print(f"警告: 数据集文件 {dataset}.mat 不存在")
 
 if not data_files:
-    print("警告: 未在data目录下找到任何.mat文件，程序退出。")
+    print("警告: 未找到指定的数据集文件，程序退出。")
     sys.exit(1)
 
 for data_file in data_files:
     dataset_name = os.path.splitext(os.path.basename(data_file))[0]
+    # 对于acm_co_I_10%、acm_co_I_20%、acm_co_I_30%，直接使用原始名称
+    config_dataset_name = dataset_name
+    
     print(f"\n开始处理数据集: {dataset_name}")
 
     for project in projects:
@@ -74,7 +99,7 @@ for data_file in data_files:
         if "extra_params" in project:
             cmd.extend(project["extra_params"])
 
-        cmd.extend([project["param_name"], dataset_name])
+        cmd.extend([project["param_name"], config_dataset_name])
         cmd.extend([project["gpu_param"], str(gpu_id)])
 
         try:

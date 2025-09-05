@@ -39,15 +39,24 @@ def _main(fts, n_class, idx_train, idx_test, H, lbls):
     criterion = nn.BCELoss()
 
     model_ft, result_test, result_train = train_model(model_ft, criterion, optimizer, schedular, idx_train, idx_test, fts, H, lbls,
-                                        200, print_freq=100)
+                                        200, print_freq=100, trial_id=trial+1, dataset_name=setting.dataname)
 
 
     return result_test, result_train
 
 
 def train_model(model, criterion, optimizer, scheduler, idx_train, idx_test, fts, H, lbls, num_epochs=25,
-                print_freq=300):
+                print_freq=300, trial_id=0, dataset_name=""):
     since = time.time()
+    
+    # 创建epoch级详细时间记录
+    epoch_details = []
+    detailed_csv_path = os.path.join(os.path.dirname(__file__), "..", "result", "detailed", f"HGNN_{dataset_name}_trial{trial_id}_epochs.csv")
+    os.makedirs(os.path.dirname(detailed_csv_path), exist_ok=True)
+    
+    # 写入表头
+    pd.DataFrame(columns=['epoch', 'forward_pass_time', 'loss_calc_time', 'backward_pass_time', 
+                         'total_epoch_time', 'train_accuracy', 'test_accuracy']).to_csv(detailed_csv_path, index=False)
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_test_acc = 0.0
@@ -57,38 +66,62 @@ def train_model(model, criterion, optimizer, scheduler, idx_train, idx_test, fts
         if epoch % print_freq == 0:
             print(f'Epoch {epoch}/{num_epochs - 1}')
 
-        for phase in ['train', 'val']:
-            if phase == 'train':
-                model.train()
-            else:
-                model.eval()
+        epoch_start_time = time.time()
+        forward_pass_time = 0.0
+        loss_calc_time = 0.0
+        backward_pass_time = 0.0
 
-            idx = idx_train if phase == 'train' else idx_test
+        # 训练阶段
+        model.train()
+        optimizer.zero_grad()
+        
+        # 记录前向传播时间
+        forward_start = time.time()
+        outputs = model(fts, H)
+        outputs = torch.sigmoid(outputs)
+        forward_pass_time = time.time() - forward_start
+        
+        # 记录损失计算时间
+        loss_start = time.time()
+        loss = criterion(outputs[idx_train], lbls[idx_train].type(torch.float))
+        train_acc = accuracy(outputs[idx_train].data.cpu().numpy(), lbls[idx_train].data.cpu().numpy())
+        loss_calc_time = time.time() - loss_start
+        
+        # 记录反向传播时间
+        backward_start = time.time()
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+        backward_pass_time = time.time() - backward_start
 
-            optimizer.zero_grad()
-            with torch.set_grad_enabled(phase == 'train'):
-                outputs = model(fts, H)
-                outputs = torch.sigmoid(outputs)
-                loss = criterion(outputs[idx], lbls[idx].type(torch.float))
-                result_train = accuracy(outputs[idx].data.cpu().numpy(), lbls[idx].data.cpu().numpy())
-                if phase == 'train':
-                    loss.backward()
-                optimizer.step()
-                scheduler.step()
+        best_train_acc = max(best_train_acc, train_acc)
 
-            if phase == 'train':
-                best_train_acc = max(best_train_acc, result_train)
-            else:  # val phase
-                with torch.no_grad():
-                    model.eval()
-                    outputs = model(fts, H)
-                    outputs = torch.sigmoid(outputs)
-                    loss_test = criterion(outputs[idx], lbls[idx].type(torch.float))
-                    result_test = accuracy(outputs[idx].data.cpu().numpy(), lbls[idx].data.cpu().numpy())
-                    
-                    if result_test > best_test_acc:
-                        best_test_acc = result_test
-                        best_model_wts = copy.deepcopy(model.state_dict())
+        # 验证阶段
+        with torch.no_grad():
+            model.eval()
+            val_start = time.time()
+            outputs = model(fts, H)
+            outputs = torch.sigmoid(outputs)
+            val_loss = criterion(outputs[idx_test], lbls[idx_test].type(torch.float))
+            test_acc = accuracy(outputs[idx_test].data.cpu().numpy(), lbls[idx_test].data.cpu().numpy())
+            
+            if test_acc > best_test_acc:
+                best_test_acc = test_acc
+                best_model_wts = copy.deepcopy(model.state_dict())
+
+        total_epoch_time = time.time() - epoch_start_time
+        
+        # 保存epoch详细信息
+        epoch_data = {
+            'epoch': epoch + 1,
+            'forward_pass_time': forward_pass_time,
+            'loss_calc_time': loss_calc_time,
+            'backward_pass_time': backward_pass_time,
+            'total_epoch_time': total_epoch_time,
+            'train_accuracy': train_acc * 100,
+            'test_accuracy': test_acc * 100
+        }
+        pd.DataFrame([epoch_data]).to_csv(detailed_csv_path, index=False, mode='a', header=False)
 
     model.load_state_dict(best_model_wts)
     return model, best_test_acc, best_train_acc
@@ -96,7 +129,7 @@ def train_model(model, criterion, optimizer, scheduler, idx_train, idx_test, fts
 
 if __name__ == '__main__':
 
-    h, X, labels, idx_train_list, idx_val_list, idx_pick = load_data(setting.dataname)
+    h, X, labels, idx_train_list, idx_val_list = load_data(setting.dataname)
     
     H = h.toarray()
     fts = X.toarray()
@@ -114,12 +147,12 @@ if __name__ == '__main__':
     test_accuracy_list = []
     train_accuracy_list = []
     save_csv = os.path.join(os.path.dirname(__file__), "..", "result", "HGNN_" + setting.dataname + ".csv")
-    lst = ['trial', 'test_accuracy', 'train_accuracy', 'time']
+    lst = ['trial', 'train_acc', 'test_acc']
     # 检查文件是否存在，如果不存在则创建并写入表头
     if not os.path.exists(save_csv):
         pd.DataFrame(columns=lst).to_csv(save_csv, index=False)
 
-    for trial in range(idx_pick.shape[0]):
+    for trial in range(1):
         # 开始记录当前trial的时间
         trial_start_time = time.time()
 
@@ -138,7 +171,7 @@ if __name__ == '__main__':
         trial_time = trial_end_time - trial_start_time
 
         # 将当前trial的数据写入CSV文件
-        result_data = {'trial': [trial + 1], 'time': [trial_time], 'test_accuracy': [test_acc * 100], 'train_accuracy': [train_acc * 100]}  # 准确率转换为百分比
+        result_data = {'trial': [trial + 1], 'train_acc': [train_acc * 100], 'test_acc': [test_acc * 100]}  # 准确率转换为百分比
         result = pd.DataFrame(result_data)
         result.to_csv(save_csv, index=False, mode='a', header=False)
 

@@ -173,34 +173,74 @@ class Hypertrain:
         self.optim = optim.Adam(self.hypergraph.all_params(), lr=.01, weight_decay=1e-4)
         self.args = args
 
-    def train(self, v, e, label_idx, labels):
+    def train(self, v, e, label_idx, labels, trial_id=0, dataset_name=""):
         self.hypergraph = self.hypergraph.to_device(device)
         v_init = v
         e_init = e
         best_err = sys.maxsize
         
-        # 计算训练准确率
+        # 创建详细记录文件
+        detailed_csv_path = os.path.join(os.path.dirname(__file__), "result", "detailed", f"HNHN_{dataset_name}_trial{trial_id}_epochs.csv")
+        os.makedirs(os.path.dirname(detailed_csv_path), exist_ok=True)
+        
+        # 初始化详细记录列表
+        epoch_data = []
+        
+        # 计算初始训练准确率
         train_err, train_acc = self.eval(pred_all, 'train')
         best_train_acc = train_acc
         
         for i in range(self.args.n_epoch):
             args.cur_epoch = i
+            
+            # 记录epoch开始时间
+            epoch_start_time = time.time()
+            
+            # 前向传播
+            forward_start = time.time()
             v, e, pred_all = self.hypergraph(v_init, e_init)
             pred = pred_all[label_idx.astype(float)]
-            loss = self.loss_fn(pred, labels)
-            test_err, test_acc = self.eval(pred_all, 'test')
-            if test_err < best_err:
-                best_err = test_err
+            forward_time = time.time() - forward_start
             
-            # 计算当前epoch的训练准确率
-            train_err, train_acc = self.eval(pred_all, 'train')
-            if train_acc > best_train_acc:
-                best_train_acc = train_acc
-                
+            # 损失计算
+            loss_start = time.time()
+            loss = self.loss_fn(pred, labels)
+            loss_time = time.time() - loss_start
+            
+            # 反向传播
+            backward_start = time.time()
             self.optim.zero_grad()
             loss.backward()
             self.optim.step()
-
+            backward_time = time.time() - backward_start
+            
+            # 计算准确率和评估
+            test_err, test_acc = self.eval(pred_all, 'test')
+            train_err, train_acc = self.eval(pred_all, 'train')
+            
+            if test_err < best_err:
+                best_err = test_err
+            if train_acc > best_train_acc:
+                best_train_acc = train_acc
+                
+            # 记录epoch总时间
+            total_epoch_time = time.time() - epoch_start_time
+            
+            # 保存epoch详细数据
+            epoch_data.append({
+                'epoch': i + 1,
+                'forward_pass_time': forward_time,
+                'loss_calc_time': loss_time,
+                'backward_pass_time': backward_time,
+                'total_epoch_time': total_epoch_time,
+                'train_accuracy': train_acc * 100,
+                'test_accuracy': test_acc * 100
+            })
+            
+        # 保存详细记录到CSV
+        if epoch_data:
+            pd.DataFrame(epoch_data).to_csv(detailed_csv_path, index=False)
+            
         test_err, test_acc = self.eval(pred_all, 'test')
         return pred_all, loss, test_acc, best_train_acc
 
@@ -236,7 +276,7 @@ def train(args, s=616):
     args.e = torch.zeros(args.ne, args.n_hidden).to(device)
     hypertrain = Hypertrain(args)
 
-    pred_all, loss, test_acc, train_acc = hypertrain.train(args.v, args.e, args.label_idx, args.labels)
+    pred_all, loss, test_acc, train_acc = hypertrain.train(args.v, args.e, args.label_idx, args.labels, trial_id=trial+1, dataset_name=dataset_name)
     return test_acc, train_acc
 
 
@@ -355,7 +395,7 @@ def start_trail(dataset_name, args):
     if not os.path.exists(save_csv):
         pd.DataFrame(columns=lst).to_csv(save_csv, index=False)
 
-    for trial in range(trials):
+    for trial in range(1):
         args = gen_data_cora(args, dataset_name=dataset_name, trail=trial)
         
         start_time = time.time()

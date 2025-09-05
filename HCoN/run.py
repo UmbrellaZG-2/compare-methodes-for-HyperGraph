@@ -10,8 +10,11 @@ import numpy as np
 
 
 
-def training(data, args, s = 2021):
+def training(data, args, s = 2021, trial_id=0, dataset_name=""):
     import time
+    import pandas as pd
+    import os
+    
     seed_everything(seed = s)
 
     H_trainX = torch.from_numpy(data.H_trainX.toarray()).float().cuda()
@@ -39,36 +42,76 @@ def training(data, args, s = 2021):
     model.cuda()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=args.weight_decay)
     
+    # 创建epoch级详细时间记录
+    detailed_csv_path = os.path.join(os.path.dirname(__file__), "..", "result", "detailed", f"HCoN_{dataset_name}_trial{trial_id}_epochs.csv")
+    os.makedirs(os.path.dirname(detailed_csv_path), exist_ok=True)
+    pd.DataFrame(columns=['epoch', 'forward_pass_time', 'loss_calc_time', 'backward_pass_time', 
+                         'total_epoch_time', 'train_accuracy', 'test_accuracy']).to_csv(detailed_csv_path, index=False)
+
     cost_val = []
     time_list = []
     total_start_time = time.time()
     
+    best_train_acc = 0.0
+    best_test_acc = 0.0
+    
     for epoch in range(epochs):
         epoch_start_time = time.time()
+        
+        # 训练阶段
         model.train()
-
-        recovered, x_output = model(hx1, hx2, X, hy1, hy2, Y, args.alpha, args.beta) 
+        
+        # 记录前向传播时间
+        forward_start = time.time()
+        recovered, x_output = model(hx1, hx2, X, hy1, hy2, Y, args.alpha, args.beta)
+        forward_pass_time = time.time() - forward_start
+        
+        # 记录损失计算时间
+        loss_start = time.time()
         loss1 = F.nll_loss(x_output[idx_train], labels[idx_train])
         loss2 = F.binary_cross_entropy_with_logits(recovered, H_trainX, pos_weight=pos_weight)
         loss_train = loss1 + gamma * loss2
         
         acc_train = accuracy(x_output[idx_train], labels[idx_train])
+        loss_calc_time = time.time() - loss_start
+        
+        # 记录反向传播时间
+        backward_start = time.time()
         optimizer.zero_grad()
         loss_train.backward()
         optimizer.step()
+        backward_pass_time = time.time() - backward_start
+
+        best_train_acc = max(best_train_acc, acc_train)
+
+        # 验证阶段
+        with torch.no_grad():
+            model.eval()
+            val_start = time.time()
+            recovered, x_output = model(hx1, hx2, X, hy1, hy2, Y, args.alpha, args.beta)
+            val_loss = F.nll_loss(x_output[idx_test], labels[idx_test])
+            test_acc = accuracy(x_output[idx_test], labels[idx_test])
+            
+            if test_acc > best_test_acc:
+                best_test_acc = test_acc
+
+        total_epoch_time = time.time() - epoch_start_time
         
-        epoch_time = time.time() - epoch_start_time
-        time_list.append(epoch_time)
+        # 保存epoch详细信息
+        epoch_data = {
+            'epoch': epoch + 1,
+            'forward_pass_time': forward_pass_time,
+            'loss_calc_time': loss_calc_time,
+            'backward_pass_time': backward_pass_time,
+            'total_epoch_time': total_epoch_time,
+            'train_accuracy': acc_train * 100,
+            'test_accuracy': test_acc * 100
+        }
+        pd.DataFrame([epoch_data]).to_csv(detailed_csv_path, index=False, mode='a', header=False)
         
     total_time = time.time() - total_start_time
     
-    with torch.no_grad():
-        model.eval()
-        recovered, x_output = model(hx1, hx2, X, hy1, hy2, Y, args.alpha, args.beta) 
-        loss_test = F.nll_loss(x_output[idx_test], labels[idx_test])
-        acc_test = accuracy(x_output[idx_test], labels[idx_test])
-        
-    return acc_test.item(), total_time, time_list
+    return best_test_acc.item(), best_train_acc.item(), total_time, []
 
 
 
@@ -83,7 +126,7 @@ if __name__ == '__main__':
     os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
     device = torch.cuda.current_device()
     
-    H, X, Y, labels, idx_train_list, idx_test_list,idx_pick = load_data(setting.dataname)
+    H, X, Y, labels, idx_train_list, idx_test_list = load_data(setting.dataname)
     
     H_trainX = H.copy()
     Y = np.eye(H.shape[1])
@@ -119,8 +162,9 @@ if __name__ == '__main__':
         os.makedirs(result_dir)
     
     acc_test = []
+    train_acc = []
     total_times = []
-    for trial in range(idx_pick.shape[0]):
+    for trial in range(1):
         idx_train = idx_train_list[trial]
         idx_test = idx_test_list[trial]
         data = dotdict()
@@ -147,25 +191,28 @@ if __name__ == '__main__':
         args.alpha = alpha
         args.beta = beta
 
-        test, total_time, time_list = training(data, args, s=seed)
-        acc_test.append(test)
+        test_acc, train_acc_trial, total_time, time_list = training(data, args, s=seed, trial_id=trial+1, dataset_name=setting.dataname)
+        acc_test.append(test_acc)
+        train_acc.append(train_acc_trial)
         total_times.append(total_time)
 
     
     # 保存结果到公共result文件夹
-    acc_test = np.array(acc_test) * 100
-    m_acc = np.mean(acc_test)
-    s_acc = np.std(acc_test)
-    # 构建完整的结果文件路径，格式为：项目名+数据集名
+    test_accuracy_list = [acc * 100 for acc in acc_test]
+    train_accuracy_list = [acc * 100 for acc in train_acc]
     result_path = os.path.join(result_dir, f"HCoN_{setting.dataname}.csv")
     # 保存所有trial的结果
     df = pd.DataFrame({
-        'trial': list(range(1, len(acc_test) + 1)),
-        'accuracy': acc_test,
-        'total_time': total_times
+        'trial': list(range(1, len(test_accuracy_list) + 1)),
+        'test_acc': test_accuracy_list,
+        'train_acc': train_accuracy_list,
     })
     df.to_csv(result_path, index=False)
     
-    # 只打印最终平均准确率
-    print(f"HCoN_{setting.dataname} 平均准确率: {m_acc:.4f} ± {s_acc:.4f}")
+    # 打印统计信息
+    m_test_acc = np.mean(test_accuracy_list)
+    s_test_acc = np.std(test_accuracy_list)
+    m_train_acc = np.mean(train_accuracy_list)
+    s_train_acc = np.std(train_accuracy_list)
+    print(f"HCoN_{setting.dataname} 测试准确率: {m_test_acc:.4f} ± {s_test_acc:.4f}, 训练准确率: {m_train_acc:.4f} ± {s_train_acc:.4f}")
 

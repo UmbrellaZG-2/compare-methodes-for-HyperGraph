@@ -52,8 +52,11 @@ def get_args():
 args = get_args()
 
 
-def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimizer):
-    tic = time.time()
+def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimizer, trial_id=0, dataset_name=""):
+    epoch_start_time = time.time()
+    
+    # 前向传播
+    forward_start = time.time()
     model.train()
     optimizer.zero_grad()
     output,x = model(features, adj, PvT)
@@ -67,10 +70,18 @@ def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimize
     for p in model.parameters():
         l2 = l2 + (p ** 2).sum()
     loss_train = loss_train + args.weight_l2 * l2
-
+    forward_time = time.time() - forward_start
+    
+    # 损失计算
+    loss_start = time.time()
     acc_train = accuracy(output[idx_train], labels[idx_train])
+    loss_time = time.time() - loss_start
+    
+    # 反向传播
+    backward_start = time.time()
     loss_train.backward()
     optimizer.step()
+    backward_time = time.time() - backward_start
 
     if not args.fastmode:
         model.eval()
@@ -78,12 +89,24 @@ def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimize
     loss_val = F.nll_loss(output[idx_val], labels[idx_val])
 
     acc_val = accuracy(output[idx_val], labels[idx_val])
+    total_epoch_time = time.time() - epoch_start_time
+    
     print('Epoch: {:04d}'.format(epoch + 1),
           'loss_train: {:.4f}'.format(loss_train.item()),
           'acc_train: {:.4f}'.format(acc_train.item()),
           'loss_val: {:.4f}'.format(loss_val.item()),
           'acc_val: {:.4f}'.format(acc_val.item()),
-          'time: {:.4f}s'.format(time.time() - tic), flush=True)
+          'time: {:.4f}s'.format(total_epoch_time), flush=True)
+          
+    return {
+        'epoch': epoch + 1,
+        'forward_pass_time': forward_time,
+        'loss_calc_time': loss_time,
+        'backward_pass_time': backward_time,
+        'total_epoch_time': total_epoch_time,
+        'train_accuracy': acc_train.item() * 100,
+        'test_accuracy': acc_val.item() * 100
+    }
 
 
 def test(model, features, adj, PvT, labels, idx_test, dataset_name):
@@ -171,11 +194,22 @@ def process_dataset(dataset_path, x ):
     optimizer = optim.Adam(model.parameters(),
                            lr=args.lr, weight_decay=args.weight_decay)
 
+    # 创建详细记录文件
+    detailed_csv_path = os.path.join(result_dir, "detailed", f"LEGCN_{dataset_name}_trial{x+1}_epochs.csv")
+    os.makedirs(os.path.dirname(detailed_csv_path), exist_ok=True)
+    
+    epoch_data = []
+    
     tic = time.time()
     for epoch in range(args.epochs):
-        train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimizer)
+        epoch_result = train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimizer, trial_id=x+1, dataset_name=dataset_name)
+        epoch_data.append(epoch_result)
 
     total_time = time.time() - tic
+    
+    # 保存详细记录
+    if epoch_data:
+        pd.DataFrame(epoch_data).to_csv(detailed_csv_path, index=False)
 
     acc_test, loss_test = test(model, features, adj, PvT, labels, idx_test, dataset_name)
 
@@ -197,7 +231,7 @@ result_dir = os.path.join(os.path.dirname(__file__), '..', 'result')
 os.makedirs(result_dir, exist_ok=True)
 
 for dataset_path in dataset_paths:
-    for x in range(1000):
+    for x in range(1):
         result = process_dataset(dataset_path,x)
         dataset_name = result['dataset']
         csv_file_path = os.path.join(result_dir, f'LEGCN_{dataset_name}.csv')
