@@ -80,10 +80,15 @@ def load_data(dataset_str=None):
     # 假设测试集与验证集相同，如果有单独的测试集索引可以修改这里
     idx_test = idx_val.copy()
     
+    # 获取idx_pick，如果文件中没有则直接报错
+    if 'idx_pick' not in data_mat:
+        raise ValueError(f"数据文件 {data_path} 中缺少 'idx_pick' 变量")
+    idx_pick = data_mat['idx_pick'].flatten()
+    
     X = normalize_features(X)
     Y = np.eye(H.shape[1])  # 重命名Y为PvT
     
-    return H, Y, X, labels, idx_train, idx_val, idx_test
+    return H, Y, X, labels, idx_train, idx_val, idx_test, idx_pick
 
 def sparse_mx_to_torch_sparse_tensor(sparse_mx):
     """Convert a scipy sparse matrix to a torch sparse tensor."""

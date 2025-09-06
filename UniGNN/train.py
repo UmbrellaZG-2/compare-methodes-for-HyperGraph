@@ -15,28 +15,7 @@ import random
 import config
 from pathlib import Path
 
-# 结果保存函数
-def save_results_to_csv(result, file_path):
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-    # 检查文件是否存在
-    file_exists = os.path.isfile(file_path)
-
-    with open(file_path, 'a', newline='') as csvfile:
-        fieldnames = ['trial', 'accuracy', 'total_time']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-        # 如果文件不存在，写入表头
-        if not file_exists:
-            writer.writeheader()
-
-        # 构建要写入的数据，确保字段匹配
-        row_data = {
-            'trial': result['trial'] + 1,  # trial从1开始计数
-            'accuracy': result['accuracy'],
-            'total_time': result['time']  # 将time改为total_time
-        }
-        writer.writerow(row_data)
+# 不保存结果到CSV文件
 
 args = config.parse()
 
@@ -65,27 +44,25 @@ test_accs = []
 best_val_accs, best_test_accs = [], []
 
 print("开始加载数据...")
-h, X, y, labels, train_idx_list, test_index_list = load_data(args.dataset)
+h, X, y, labels, train_idx_list, test_index_list, idx_pick = load_data(args.dataset)
 G = H_to_G(h)
 train_idx  = torch.LongTensor(train_idx_list.astype(np.int64)).cuda()
 test_idx = torch.LongTensor(test_index_list.astype(np.int64)).cuda()
 print("数据加载完成!")
 Y = torch.LongTensor(np.where(labels)[1].astype(np.int64)).cuda()
 X = torch.from_numpy(X.toarray()).float().cuda()
-result_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "result"))
-os.makedirs(result_dir, exist_ok=True)
+# 不保存结果到CSV文件
 
-# 统一使用{方法名+数据集名}的格式命名文件
-method_name = 'UniGNN'
-save_path = os.path.join(result_dir, f"{method_name}_{args.dataset}.csv")
+# 存储每个trial的结果
+trial_results = []
 
-for run in range(train_idx.shape[0]):
-    train_idx_run = train_idx[run]
-    test_idx_run = test_idx[run]
+for trial_idx, trial in enumerate(idx_pick):
+    train_idx_run = train_idx[trial]
+    test_idx_run = test_idx[trial]
 
     model, optimizer = initialise(X, Y, G, args)
 
-    print(f'Run {run}/{args.n_runs}, Total Epochs: {args.epochs}')
+    print(f'Trial {trial_idx+1} (idx={trial}), Total Epochs: {args.epochs}')
     print(f'total_params:{sum(p.numel() for p in model.parameters() if p.requires_grad)}')
 
     tic_run = time.time()
@@ -106,18 +83,15 @@ for run in range(train_idx.shape[0]):
         best_test_acc = max(best_test_acc, test_acc)
 
     total_run_time = time.time() - tic_run
-    print(f"Run {run}/{train_idx_list.shape[0]}, best test accuracy: {best_test_acc:.2f}, acc(last): {test_acc:.2f}, total time: {total_run_time:.2f}s")
-
-    # 构建结果字典
-    result = {
-        'trial': run,
-        'accuracy': best_test_acc,
-        'loss': 0,  # 这里可以根据实际情况计算loss
-        'time': total_run_time,
-    }
+    print(f"Trial {trial_idx+1} (idx={trial}), best test accuracy: {best_test_acc:.2f}, acc(last): {test_acc:.2f}, total time: {total_run_time:.2f}s")
     
-    # 使用save_results_to_csv函数保存结果
-    save_results_to_csv(result, save_path)
+    # 存储当前trial结果
+    trial_results.append({
+        'trial': trial,
+        'test_accuracy': test_acc,
+        'best_test_accuracy': best_test_acc,
+        'time': total_run_time
+    })
     
     test_accs.append(test_acc)
     best_test_accs.append(best_test_acc)
@@ -125,3 +99,19 @@ for run in range(train_idx.shape[0]):
 
 print(f"Average final test accuracy: {np.mean(test_accs)} ± {np.std(test_accs)}")
 print(f"Average best test accuracy: {np.mean(best_test_accs)} ± {np.std(best_test_accs)}")
+
+# 保存结果到CSV文件
+result_dir = "result"
+os.makedirs(result_dir, exist_ok=True)
+csv_path = os.path.join(result_dir, f"UniGNN_{args.dataset}_results.csv")
+
+with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+    writer = csv.writer(csvfile)
+    # 写入表头
+    writer.writerow(['trial', 'test_accuracy', 'train_accuracy', 'time'])
+    # 写入每个trial的结果（UniGNN没有训练准确度，用测试准确度代替）
+    for result in trial_results:
+        writer.writerow([result['trial'], result['test_accuracy'], 
+                        result['test_accuracy'], result['time']])
+
+print(f"结果已保存到: {csv_path}")

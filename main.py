@@ -10,38 +10,44 @@ args = parser.parse_args()
 
 gpu_id = args.gpu
 
-projects = [
-    {
-        "name": "HCoN",
-        "script": "run.py",
-        "param_name": "--dataname",
-        "gpu_param": "--gpu"
-    },
-    {
-        "name": "HGNN",
-        "script": "hgnn_time.py",
-        "param_name": "--dataname",
-        "gpu_param": "--gpu"
-    },
-    {
-        "name": "HNHN",
-        "script": "hnhn_efficiency.py",
-        "param_name": "--dataset_name",
-        "gpu_param": "--gpu"
-    },
-    {
-        "name": "UniGNN",
-        "script": "train.py",
-        "param_name": "--dataset",
-        "extra_params": ["--data", "custom"],
-        "gpu_param": "--gpu"
-    },
-    {
-        "name": "LEGCN",
-        "script": "main.py",
-        "param_name": "--dataset",
-        "gpu_param": "--gpu"
-    }
+projects = [ 
+    { 
+        "name": "HCoN", 
+        "script": "run.py", 
+        "param_name": "--dataname", 
+        "gpu_param": "--gpu" 
+    }, 
+    { 
+        "name": "HGNN", 
+        "script": "hgnn_time.py", 
+        "param_name": "--dataname", 
+        "gpu_param": "--gpu" 
+    }, 
+    { 
+        "name": "HNHN", 
+        "script": "hnhn_efficiency.py", 
+        "param_name": "--dataset_name", 
+        "gpu_param": "--gpu" 
+    }, 
+    { 
+        "name": "UniGNN", 
+        "script": "train.py", 
+        "param_name": "--dataset", 
+        "extra_params": ["--data", "custom"], 
+        "gpu_param": "--gpu" 
+    }, 
+    { 
+        "name": "LEGCN", 
+        "script": "main.py", 
+        "param_name": "--dataset", 
+        "gpu_param": "--gpu" 
+    }, 
+    { 
+        "name": "SCN", 
+        "script": "run_ours.py", 
+        "param_name": "--dataname", 
+        "gpu_param": "--gpu" 
+    } 
 ]
 
 data_dir = os.path.abspath("data")

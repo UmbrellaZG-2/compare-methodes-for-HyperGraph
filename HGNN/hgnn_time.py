@@ -113,11 +113,6 @@ if __name__ == '__main__':
 
     test_accuracy_list = []
     train_accuracy_list = []
-    save_csv = os.path.join(os.path.dirname(__file__), "..", "result", "HGNN_" + setting.dataname + ".csv")
-    lst = ['trial', 'test_accuracy', 'train_accuracy', 'time']
-    # 检查文件是否存在，如果不存在则创建并写入表头
-    if not os.path.exists(save_csv):
-        pd.DataFrame(columns=lst).to_csv(save_csv, index=False)
 
     for trial in range(idx_pick.shape[0]):
         # 开始记录当前trial的时间
@@ -137,12 +132,23 @@ if __name__ == '__main__':
         trial_end_time = time.time()
         trial_time = trial_end_time - trial_start_time
 
-        # 将当前trial的数据写入CSV文件
-        result_data = {'trial': [trial + 1], 'time': [trial_time], 'test_accuracy': [test_acc * 100], 'train_accuracy': [train_acc * 100]}  # 准确率转换为百分比
-        result = pd.DataFrame(result_data)
-        result.to_csv(save_csv, index=False, mode='a', header=False)
-
         print(f"Trial {trial + 1} test_acc: {test_acc * 100:.2f}%, train_acc: {train_acc * 100:.2f}%, time: {trial_time:.4f} seconds")
+
+    # 保存结果到CSV文件
+    result_dir = "result"
+    os.makedirs(result_dir, exist_ok=True)
+    csv_path = os.path.join(result_dir, f"HGNN_{setting.dataname}_results.csv")
+    
+    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        # 写入表头
+        writer.writerow(['trial', 'test_accuracy', 'train_accuracy', 'time'])
+        # 写入每个trial的结果
+        for trial_idx, (test_acc, train_acc, trial_time) in enumerate(zip(test_accuracy_list, train_accuracy_list, 
+                                                                        [0] * len(test_accuracy_list))):
+            writer.writerow([trial_idx + 1, test_acc * 100, train_acc * 100, trial_time])
+    
+    print(f"结果已保存到: {csv_path}")
 
 
 

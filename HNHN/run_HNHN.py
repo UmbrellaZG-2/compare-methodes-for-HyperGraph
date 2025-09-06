@@ -241,7 +241,7 @@ def train(args, s=616):
 
 
 def gen_data_cora(args, dataset_name, trail=0):
-    h, X, labels, idx_train, idx_test = load_data(dataset_name)
+    h, X, labels, idx_train, idx_test, _ = load_data(dataset_name)
 
     Y = np.eye(h.shape[1])
 
@@ -344,18 +344,16 @@ def gen_data_cora(args, dataset_name, trail=0):
 
 def start_trail(dataset_name, args):
     # 先加载数据以获取trial数量
-    h, X, labels, idx_train, idx_test = load_data(dataset_name)
-    trials = idx_train.shape[0]
+    h, X, labels, idx_train, idx_test, idx_pick = load_data(dataset_name)
+    trials = len(idx_pick)
     test_acc_list = []
     train_acc_list = []
     time_list = []
-    save_csv = os.path.join(os.path.dirname(__file__), "result", "HNHN_" + dataset_name + ".csv")
-    lst = ['trial', 'test_accuracy', 'train_accuracy', 'time']
-    # 检查文件是否存在，如果不存在则创建并写入表头
-    if not os.path.exists(save_csv):
-        pd.DataFrame(columns=lst).to_csv(save_csv, index=False)
-
-    for trial in range(trials):
+    
+    # 存储每个trial的结果
+    trial_results = []
+    
+    for trial_idx, trial in enumerate(idx_pick):
         args = gen_data_cora(args, dataset_name=dataset_name, trail=trial)
         
         start_time = time.time()
@@ -366,13 +364,16 @@ def start_trail(dataset_name, args):
         test_acc_list.append(test_acc)
         train_acc_list.append(train_acc)
         time_list.append(trial_time)
+        
+        # 存储当前trial结果
+        trial_results.append({
+            'trial': trial,
+            'test_accuracy': test_acc,
+            'train_accuracy': train_acc,
+            'time': trial_time
+        })
 
-        # 将当前trial的数据写入CSV文件
-        result_data = {'trial': [trial + 1], 'time': [trial_time], 'test_accuracy': [test_acc * 100], 'train_accuracy': [train_acc * 100]}  # 准确率转换为百分比
-        result = pd.DataFrame(result_data)
-        result.to_csv(save_csv, index=False, mode='a', header=False)
-
-        print(f"Trial {trial + 1} test_acc: {test_acc * 100:.2f}%, train_acc: {train_acc * 100:.2f}%, time: {trial_time:.4f} seconds")
+        print(f"Trial {trial_idx + 1} (idx={trial}) test_acc: {test_acc * 100:.2f}%, train_acc: {train_acc * 100:.2f}%, time: {trial_time:.4f} seconds")
 
     # 计算并打印平均准确率
     avg_test_accuracy = np.mean(test_acc_list)
@@ -381,6 +382,25 @@ def start_trail(dataset_name, args):
     print(f"Average test accuracy over {trials} trials: {avg_test_accuracy * 100:.4f}%")
     print(f"Average train accuracy over {trials} trials: {avg_train_accuracy * 100:.4f}%")
     print(f"HNHN_{dataset_name} 平均时间: {avg_time:.2f}s")
+    
+    # 保存结果到CSV文件
+    import csv
+    import os
+    
+    result_dir = "result"
+    os.makedirs(result_dir, exist_ok=True)
+    csv_path = os.path.join(result_dir, f"HNHN_{dataset_name}_results.csv")
+    
+    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        # 写入表头
+        writer.writerow(['trial', 'test_accuracy', 'train_accuracy', 'time'])
+        # 写入每个trial的结果
+        for result in trial_results:
+            writer.writerow([result['trial'], result['test_accuracy'], 
+                           result['train_accuracy'], result['time']])
+    
+    print(f"结果已保存到: {csv_path}")
 
 
 def parse_args():

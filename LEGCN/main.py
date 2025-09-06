@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import os
 import csv
+import pandas as pd
 
 from LE import hypergraph_to_pairs, transform
 from utils import load_data, accuracy
@@ -100,33 +101,13 @@ def test(model, features, adj, PvT, labels, idx_test, dataset_name):
     return acc_test.item(), loss_test.item()
 
 
-def save_results_to_csv(result, file_path):
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-    # 检查文件是否存在
-    file_exists = os.path.isfile(file_path)
-
-    with open(file_path, 'a', newline='') as csvfile:
-        fieldnames = ['trial', 'accuracy', 'total_time']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-        # 如果文件不存在，写入表头
-        if not file_exists:
-            writer.writeheader()
-
-        # 构建要写入的数据，确保字段匹配
-        row_data = {
-            'trial': result['trial'] + 1,  # trial从1开始计数
-            'accuracy': result['accuracy'],
-            'total_time': result['time']  # 将time改为total_time
-        }
-        writer.writerow(row_data)
+# 不保存结果到CSV文件
 
 
-def process_dataset(dataset_path, x ):
+def process_dataset(dataset_path, trial_value):
     dataset_name = os.path.basename(dataset_path).split('.')[0]
     device = torch.device("cuda" if args.gpu >= 0 else "cpu")
-    H, Y, X, labels, idx_train, idx_val, idx_test = load_data(dataset_name)
+    H, Y, X, labels, idx_train, idx_val, idx_test, idx_pick = load_data(dataset_name)
     pairs = hypergraph_to_pairs(H)
     adj, Pv, PvT, Pe, PeT = transform(pairs)
     adj = adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj)
@@ -139,9 +120,9 @@ def process_dataset(dataset_path, x ):
     labels = torch.LongTensor(np.where(labels)[1]).to(device)
     PvT = sparse_mx_to_torch_sparse_tensor(PvT).to(device)
 
-    idx_train = torch.LongTensor(idx_train[x].astype(np.int64)).flatten().to(device)
-    idx_val = torch.LongTensor(idx_val[x].astype(np.int64)).flatten().to(device)
-    idx_test = torch.LongTensor(idx_test[x].astype(np.int64)).flatten().to(device)
+    idx_train = torch.LongTensor(idx_train[trial_value].astype(np.int64)).flatten().to(device)
+    idx_val = torch.LongTensor(idx_val[trial_value].astype(np.int64)).flatten().to(device)
+    idx_test = torch.LongTensor(idx_test[trial_value].astype(np.int64)).flatten().to(device)
 
     adj = torch.FloatTensor(adj.toarray()).to(device)
     n_classes = int(labels.max().item() - labels.min().item() + 1)
@@ -180,7 +161,7 @@ def process_dataset(dataset_path, x ):
     acc_test, loss_test = test(model, features, adj, PvT, labels, idx_test, dataset_name)
 
     return {
-        'trial': x,
+        'trial': trial_value,
         'dataset': dataset_name,
         'accuracy': acc_test,
         'loss': loss_test,
@@ -193,12 +174,40 @@ if args.dataset == 'all' or args.dataset is None:
 else:
     dataset_paths = [os.path.join(os.path.dirname(__file__), '..', 'data', f'{args.dataset}.mat')]
 
-result_dir = os.path.join(os.path.dirname(__file__), '..', 'result')
-os.makedirs(result_dir, exist_ok=True)
-
 for dataset_path in dataset_paths:
-    for x in range(1000):
-        result = process_dataset(dataset_path,x)
+    # 先加载数据获取idx_pick
+    _, _, _, _, _, _, _, idx_pick = load_data(os.path.basename(dataset_path).split('.')[0])
+    
+    # 存储每个trial的结果
+    trial_results = []
+    
+    for trial_idx, trial in enumerate(idx_pick):
+        result = process_dataset(dataset_path, trial)
         dataset_name = result['dataset']
-        csv_file_path = os.path.join(result_dir, f'LEGCN_{dataset_name}.csv')
-        save_results_to_csv(result, csv_file_path)
+        
+        # 存储当前trial结果
+        trial_results.append({
+            'trial': trial,
+            'test_accuracy': result['accuracy'],
+            'time': result['time']
+        })
+        
+        print(f"Trial {trial_idx+1} (idx={trial}) completed for {dataset_name}")
+    
+    # 保存结果到CSV文件
+    import os
+    
+    result_dir = "result"
+    os.makedirs(result_dir, exist_ok=True)
+    csv_path = os.path.join(result_dir, f"LEGCN_{dataset_name}_results.csv")
+    
+    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        # 写入表头
+        writer.writerow(['trial', 'test_accuracy', 'train_accuracy', 'time'])
+        # 写入每个trial的结果（LEGCN没有训练准确度，用测试准确度代替）
+        for result in trial_results:
+            writer.writerow([result['trial'], result['test_accuracy'], 
+                           result['test_accuracy'], result['time']])
+    
+    print(f"结果已保存到: {csv_path}")

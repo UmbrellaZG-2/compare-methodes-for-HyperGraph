@@ -59,10 +59,15 @@ def load_data(dataset_str=None):
     idx_train_list = np.maximum(data_mat['idx_train']-1, 0)
     idx_val_list = data_mat['idx_test']-1
     
+    # 获取idx_pick，如果文件中没有则直接报错
+    if 'idx_pick' not in data_mat:
+        raise ValueError(f"数据文件 {data_path} 中缺少 'idx_pick' 变量")
+    idx_pick = data_mat['idx_pick'].flatten()
+    
     X = normalize_features(X)
     Y = labels
     
-    return h, X, Y, labels, idx_train_list, idx_val_list
+    return h, X, Y, labels, idx_train_list, idx_val_list, idx_pick
 
 
 import numpy as np
