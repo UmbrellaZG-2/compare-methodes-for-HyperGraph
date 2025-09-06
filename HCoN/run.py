@@ -66,8 +66,9 @@ def training(data, args, s = 2021):
         recovered, x_output = model(hx1, hx2, X, hy1, hy2, Y, args.alpha, args.beta) 
         loss_test = F.nll_loss(x_output[idx_test], labels[idx_test])
         acc_test = accuracy(x_output[idx_test], labels[idx_test])
+        acc_train = accuracy(x_output[idx_train], labels[idx_train])
         
-    return acc_test.item(), total_time, time_list
+    return acc_test.item(), acc_train.item(), total_time, time_list
 
 
 
@@ -165,16 +166,16 @@ if __name__ == '__main__':
     
     result_dir = "result"
     os.makedirs(result_dir, exist_ok=True)
-    csv_path = os.path.join(result_dir, f"HCoN_{setting.dataname}_results.csv")
+    csv_path = os.path.join(result_dir, f"HCoN_{setting.dataname}_trials.csv")
     
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         # 写入表头
-        writer.writerow(['trial', 'test_accuracy', 'train_accuracy', 'time'])
-        # 写入每个trial的结果（HCoN没有训练准确度，用测试准确度代替）
+        writer.writerow(['trial', 'trial_idx', 'test_accuracy', 'time'])
+        # 写入每个trial的结果
         for result in trial_results:
-            writer.writerow([result['trial'], result['test_accuracy'], 
+            writer.writerow([trial_results.index(result) + 1, result['trial'], 
                            result['test_accuracy'], result['time']])
     
-    print(f"结果已保存到: {csv_path}")
+    print(f"Trial results saved to: {csv_path}")
 

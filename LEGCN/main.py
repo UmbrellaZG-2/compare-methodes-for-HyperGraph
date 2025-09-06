@@ -79,13 +79,7 @@ def train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimize
     loss_val = F.nll_loss(output[idx_val], labels[idx_val])
 
     acc_val = accuracy(output[idx_val], labels[idx_val])
-    print('Epoch: {:04d}'.format(epoch + 1),
-          'loss_train: {:.4f}'.format(loss_train.item()),
-          'acc_train: {:.4f}'.format(acc_train.item()),
-          'loss_val: {:.4f}'.format(loss_val.item()),
-          'acc_val: {:.4f}'.format(acc_val.item()),
-          'time: {:.4f}s'.format(time.time() - tic), flush=True)
-
+    return acc_train.item(), acc_val.item()
 
 def test(model, features, adj, PvT, labels, idx_test, dataset_name):
     model.eval()
@@ -153,8 +147,10 @@ def process_dataset(dataset_path, trial_value):
                            lr=args.lr, weight_decay=args.weight_decay)
 
     tic = time.time()
+    train_accuracies = []
     for epoch in range(args.epochs):
-        train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimizer)
+        acc_train, acc_val = train(model, epoch, features, adj, PvT, labels, idx_train, idx_val, optimizer)
+        train_accuracies.append(acc_train)
 
     total_time = time.time() - tic
 
@@ -164,6 +160,7 @@ def process_dataset(dataset_path, trial_value):
         'trial': trial_value,
         'dataset': dataset_name,
         'accuracy': acc_test,
+        'train_accuracy': train_accuracies[-1] if train_accuracies else 0.0,
         'loss': loss_test,
         'time': total_time
     }
@@ -189,6 +186,7 @@ for dataset_path in dataset_paths:
         trial_results.append({
             'trial': trial,
             'test_accuracy': result['accuracy'],
+            'train_accuracy': result['train_accuracy'],
             'time': result['time']
         })
         
@@ -199,15 +197,14 @@ for dataset_path in dataset_paths:
     
     result_dir = "result"
     os.makedirs(result_dir, exist_ok=True)
-    csv_path = os.path.join(result_dir, f"LEGCN_{dataset_name}_results.csv")
+    csv_path = os.path.join(result_dir, f"LEGCN_{dataset_name}_trials.csv")
     
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         # 写入表头
-        writer.writerow(['trial', 'test_accuracy', 'train_accuracy', 'time'])
-        # 写入每个trial的结果（LEGCN没有训练准确度，用测试准确度代替）
-        for result in trial_results:
-            writer.writerow([result['trial'], result['test_accuracy'], 
-                           result['test_accuracy'], result['time']])
+        writer.writerow(['trial', 'trial_idx', 'test_accuracy', 'train_accuracy', 'time'])
+        # 写入每个trial的结果
+        for trial_idx, result in enumerate(trial_results):
+            writer.writerow([trial_idx + 1, result['trial'], result['test_accuracy'], result['train_accuracy'], result['time']])
     
     print(f"结果已保存到: {csv_path}")

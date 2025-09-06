@@ -389,18 +389,18 @@ def start_trail(dataset_name, args):
     
     result_dir = "result"
     os.makedirs(result_dir, exist_ok=True)
-    csv_path = os.path.join(result_dir, f"HNHN_{dataset_name}_results.csv")
+    csv_path = os.path.join(result_dir, f"HNHN_{dataset_name}_trials.csv")
     
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         # 写入表头
-        writer.writerow(['trial', 'test_accuracy', 'train_accuracy', 'time'])
+        writer.writerow(['trial', 'trial_idx', 'test_accuracy', 'train_accuracy', 'time'])
         # 写入每个trial的结果
-        for result in trial_results:
-            writer.writerow([result['trial'], result['test_accuracy'], 
+        for trial_idx, result in enumerate(trial_results):
+            writer.writerow([trial_idx + 1, result['trial'], result['test_accuracy'], 
                            result['train_accuracy'], result['time']])
     
-    print(f"结果已保存到: {csv_path}")
+    print(f"Trial results saved to: {csv_path}")
 
 
 def parse_args():

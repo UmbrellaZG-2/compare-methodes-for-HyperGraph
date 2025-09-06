@@ -137,18 +137,17 @@ if __name__ == '__main__':
     # 保存结果到CSV文件
     result_dir = "result"
     os.makedirs(result_dir, exist_ok=True)
-    csv_path = os.path.join(result_dir, f"HGNN_{setting.dataname}_results.csv")
+    csv_path = os.path.join(result_dir, f"HGNN_{setting.dataname}_trials.csv")
     
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.writer(csvfile)
         # 写入表头
-        writer.writerow(['trial', 'test_accuracy', 'train_accuracy', 'time'])
+        writer.writerow(['trial', 'trial_idx', 'test_accuracy', 'train_accuracy'])
         # 写入每个trial的结果
-        for trial_idx, (test_acc, train_acc, trial_time) in enumerate(zip(test_accuracy_list, train_accuracy_list, 
-                                                                        [0] * len(test_accuracy_list))):
-            writer.writerow([trial_idx + 1, test_acc * 100, train_acc * 100, trial_time])
+        for trial_idx, (test_acc, train_acc, trial) in enumerate(zip(test_accuracy_list, train_accuracy_list, idx_pick)):
+            writer.writerow([trial_idx + 1, trial, test_acc * 100, train_acc * 100])
     
-    print(f"结果已保存到: {csv_path}")
+    print(f"Trial results saved to: {csv_path}")
 
 
 

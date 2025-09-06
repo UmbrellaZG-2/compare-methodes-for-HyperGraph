@@ -68,6 +68,7 @@ for trial_idx, trial in enumerate(idx_pick):
     tic_run = time.time()
 
     best_test_acc, test_acc, Z = 0, 0, None    
+    train_acc_final = 0
     for epoch in range(args.epochs):
         model.train()
         optimizer.zero_grad()
@@ -81,14 +82,16 @@ for trial_idx, trial in enumerate(idx_pick):
         train_acc = accuracy(Z[train_idx_run], Y[train_idx_run])
         test_acc = accuracy(Z[test_idx_run], Y[test_idx_run])
         best_test_acc = max(best_test_acc, test_acc)
+        train_acc_final = train_acc
 
     total_run_time = time.time() - tic_run
-    print(f"Trial {trial_idx+1} (idx={trial}), best test accuracy: {best_test_acc:.2f}, acc(last): {test_acc:.2f}, total time: {total_run_time:.2f}s")
+    print(f"Trial {trial_idx+1} (idx={trial}), best test accuracy: {best_test_acc:.2f}, acc(last): {test_acc:.2f}, train accuracy: {train_acc_final:.2f}, total time: {total_run_time:.2f}s")
     
     # 存储当前trial结果
     trial_results.append({
         'trial': trial,
         'test_accuracy': test_acc,
+        'train_accuracy': train_acc_final,
         'best_test_accuracy': best_test_acc,
         'time': total_run_time
     })
@@ -103,15 +106,14 @@ print(f"Average best test accuracy: {np.mean(best_test_accs)} ± {np.std(best_te
 # 保存结果到CSV文件
 result_dir = "result"
 os.makedirs(result_dir, exist_ok=True)
-csv_path = os.path.join(result_dir, f"UniGNN_{args.dataset}_results.csv")
+csv_path = os.path.join(result_dir, f"UniGNN_{args.dataset}_trials.csv")
 
 with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-    writer = csv.writer(csvfile)
-    # 写入表头
-    writer.writerow(['trial', 'test_accuracy', 'train_accuracy', 'time'])
-    # 写入每个trial的结果（UniGNN没有训练准确度，用测试准确度代替）
-    for result in trial_results:
-        writer.writerow([result['trial'], result['test_accuracy'], 
-                        result['test_accuracy'], result['time']])
+        writer = csv.writer(csvfile)
+        # 写入表头
+        writer.writerow(['trial', 'trial_idx', 'test_accuracy', 'train_accuracy', 'time'])
+        # 写入每个trial的结果
+        for trial_idx, result in enumerate(trial_results):
+            writer.writerow([trial_idx + 1, result['trial'], result['test_accuracy'], result['train_accuracy'], result['time']])
 
-print(f"结果已保存到: {csv_path}")
+print(f"Trial results saved to: {csv_path}")

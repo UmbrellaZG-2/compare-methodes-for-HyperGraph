@@ -2,7 +2,7 @@ import numpy as np
 import scipy.sparse as sp
 import pickle as pkl
 import torch
-from scipy.sparse.linalg.eigen.arpack import eigsh
+from scipy.sparse.linalg import eigsh
 import sys
 import random
 import math
@@ -34,7 +34,8 @@ def seed_everything(seed=616):
 
     
 def load_data_simplices2(dataset_str):
-    data_mat = scio.loadmat("data/{}.mat".format(dataset_str))
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    data_mat = scio.loadmat(os.path.join(data_dir, "{}.mat".format(dataset_str)))
     X = data_mat['X0']
     Y = data_mat['X1']
     Z = data_mat['X2']
@@ -64,7 +65,8 @@ def load_data_simplices2(dataset_str):
     return H1, H2, X, Y, Z, labels, idx_train_list, idx_val_list, A01, A02, A12, idx_pick
 
 def load_data_simplices2_validation(dataset_str):
-    data_mat = scio.loadmat("data/{}.mat".format(dataset_str))
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    data_mat = scio.loadmat(os.path.join(data_dir, "{}.mat".format(dataset_str)))
     X = data_mat['X0']
     Y = data_mat['X1']
     Z = data_mat['X2']
@@ -89,7 +91,8 @@ def load_data_simplices2_validation(dataset_str):
     return H1, H2, X, Y, Z, labels, idx_train_list, idx_val_list, A01, A02, A12
 
 def load_data_simplices3(dataset_str):
-    data_mat = scio.loadmat("data/{}.mat".format(dataset_str))
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    data_mat = scio.loadmat(os.path.join(data_dir, "{}.mat".format(dataset_str)))
     X0 = data_mat['X0']
     X1 = data_mat['X1']
     X2 = data_mat['X2']
@@ -120,7 +123,8 @@ def load_data_simplices3(dataset_str):
     return H1, H2, X0, X1, X2, X3, labels, idx_train_list, idx_val_list, A01, A02, A03, A12, A13, A23, A
 
 def load_data_simplices3_validation(dataset_str):
-    data_mat = scio.loadmat("data/{}.mat".format(dataset_str))
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    data_mat = scio.loadmat(os.path.join(data_dir, "{}.mat".format(dataset_str)))
     X0 = data_mat['X0']
     X1 = data_mat['X1']
     X2 = data_mat['X2']
@@ -152,7 +156,8 @@ def load_data_simplices3_validation(dataset_str):
 
 
 def load_data_mat(dataset_str):
-    data_mat = scio.loadmat("data/{}.mat".format(dataset_str))
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    data_mat = scio.loadmat(os.path.join(data_dir, "{}.mat".format(dataset_str)))
     h = data_mat['H']
     X = data_mat['X0']
     Y = data_mat['X1']
@@ -166,7 +171,8 @@ def load_data_mat(dataset_str):
     return h, X, Y, labels, idx_train_list, idx_val_list    
 
 def load_data_mat_validation(dataset_str):
-    data_mat = scio.loadmat("data/{}.mat".format(dataset_str))
+    data_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    data_mat = scio.loadmat(os.path.join(data_dir, "{}.mat".format(dataset_str)))
     h = data_mat['H']
     X = data_mat['X0']
     Y = data_mat['X1']

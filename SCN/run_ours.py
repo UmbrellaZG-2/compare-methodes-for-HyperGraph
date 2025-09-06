@@ -16,7 +16,7 @@ import random
 from utils import seed_everything, load_data_simplices2, load_data_simplices3, accuracy, generate_G_from_H
 import csv
 import pandas as pd
-from setting import setting
+
 
 
 '''
@@ -40,45 +40,30 @@ def train_model(model, criterion, optimizer, idx_train, idx_test, fts_x1, fts_x2
 
     _, labels = torch.max(lbls, 1)
     
-    # 创建详细记录文件
-    result_dir = os.path.join(os.path.dirname(__file__), "..", "result")
-    detailed_csv_path = os.path.join(result_dir, "detailed", f"SCN_{dataset_name}_trial{trial_id}_epochs.csv")
-    os.makedirs(os.path.dirname(detailed_csv_path), exist_ok=True)
-    
-    epoch_data = []
-    
     loss_train_list = np.zeros((epochs, 1))
     loss_test_list = np.zeros((epochs, 1))
     acc_train_list = np.zeros((epochs, 1))
     acc_test_list = np.zeros((epochs, 1))
     
     for epoch in range(num_epochs):
-        epoch_start_time = time.time()
-        
-        # 前向传播
-        forward_start = time.time()
         model.train()  
         outputs = model(fts_x1, H1, fts_x2, H2, alpha, indices)
         outputs = outputs[ind_wanted]
         loss_train = criterion(outputs[idx_train], lbls[idx_train].type(torch.float))
-        forward_time = time.time() - forward_start
         
         _, preds = torch.max(outputs, 1)
         running_corrects = torch.sum(preds[idx_train] == labels[idx_train])
         acc_train = running_corrects.double() / len(idx_train)
         
         # 反向传播
-        backward_start = time.time()
         optimizer.zero_grad()
         loss_train.backward()
         optimizer.step()
-        backward_time = time.time() - backward_start
         
         loss_train_list[epoch] = loss_train.item()
         acc_train_list[epoch] = acc_train.item()
         
         # 评估阶段
-        eval_start = time.time()
         with torch.no_grad():
             model.eval()
             outputs = model(fts_x1, H1, fts_x2, H2, alpha, indices)
@@ -92,23 +77,6 @@ def train_model(model, criterion, optimizer, idx_train, idx_test, fts_x1, fts_x2
             
             loss_test_list[epoch] = loss_test.item()
             acc_test_list[epoch] = acc_test.item()
-            eval_time = time.time() - eval_start
-        
-        # 记录总时间
-        total_epoch_time = time.time() - epoch_start_time
-        
-        # 保存epoch详细数据
-        epoch_data.append({
-            'epoch': epoch + 1,
-            'forward_pass_time': forward_time,
-            'loss_calc_time': eval_start - forward_start - forward_time,  # 损失计算时间
-            'backward_pass_time': backward_time,
-            'total_epoch_time': total_epoch_time,
-            'train_accuracy': acc_train.item() * 100,
-            'test_accuracy': acc_test.item() * 100
-        })
-        
-    # 不保存详细记录到CSV
 
 
 #         loss_val = criterion(outputs[idx_test], lbls[idx_test].type(torch.float))
@@ -184,7 +152,6 @@ if __name__ == '__main__':
     
     
     
-    
     if setting.type == "node_cls":
         ind_wanted = idx_n0
     elif setting.type == "edge_cls":
@@ -209,6 +176,8 @@ if __name__ == '__main__':
     
     if setting.dataname == "cora_II":
         alpha = 0.8
+    else:
+        alpha = 0.8  # 为其他数据集设置默认值
     
     
     dim_hidden = 512
@@ -219,15 +188,17 @@ if __name__ == '__main__':
     epochs = 200
     dropout = 0
     
-    # 存储每个trial的结果
-    trial_results = []
+    # 根据idx_pick的长度初始化数组
+    num_trials = len(idx_pick)
+    loss_train_list = np.zeros((epochs, num_trials))
+    loss_test_list = np.zeros((epochs, num_trials))
+    acc_train_list = np.zeros((epochs, num_trials))
+    acc_test_list = np.zeros((epochs, num_trials))
     acc_test = []
-    
     for trial_idx, trial in enumerate(idx_pick):
         
         name = f'{dropout}-{dim_hidden}-{weight_decay}-{learning_rate}-{alpha}'
         print(f'ours, {setting.dataname}, GPU: {setting.gpu_id}, Trial: {trial_idx+1} (idx={trial}), Setting: {name} ...')
-
 
         idx_train = idx_train_list[trial].astype(int)
         idx_test = idx_val_list[trial].astype(int)
@@ -238,38 +209,54 @@ if __name__ == '__main__':
         acc, acc_train_l, acc_test_l, loss_train, loss_test = _main(fts_x1, fts_x2, n_class, dim_hidden, dropout, learning_rate, weight_decay, alpha, idx_train, idx_test, H1, H2, indices, lbls, trial+1, setting.dataname)
 
         acc_test.append(acc)
-        
-        # 存储当前trial结果
-        trial_results.append({
-            'trial': trial,
-            'test_accuracy': acc,
-            'train_accuracy': np.max(acc_train_l) if len(acc_train_l) > 0 else 0,
-            'time': 0  # SCN当前没有时间记录
-        })
+        acc_train_list[0:len(acc_train_l), trial_idx] = acc_train_l.reshape(-1)
+        acc_test_list[0:len(acc_test_l), trial_idx] = acc_test_l.reshape(-1)
+        loss_train_list[0:len(loss_train), trial_idx] = loss_train.reshape(-1)
+        loss_test_list[0:len(loss_test), trial_idx] = loss_test.reshape(-1)
+
 
     acc_test = np.array(acc_test) * 100
     m_acc = np.mean(acc_test)
     s_acc = np.std(acc_test)
     print("Test set results:", "accuracy: {:.4f}({:.4f})".format(m_acc, s_acc))
 
-    # 保存结果到CSV文件
-    result_dir = "result"
+    # 使用统一的结果目录
+    result_dir = os.path.join(os.path.dirname(__file__), "..", "result")
     os.makedirs(result_dir, exist_ok=True)
-    csv_path = os.path.join(result_dir, f"SCN_{setting.dataname}_results.csv")
     
-    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-        writer = csv.writer(csvfile)
-        # 写入表头
-        writer.writerow(['trial', 'test_accuracy', 'train_accuracy', 'time'])
-        # 写入每个trial的结果
-        for result in trial_results:
-            writer.writerow([result['trial'], result['test_accuracy'], 
-                           result['train_accuracy'], result['time']])
+    # 保存每个trial的汇总结果
+    detailed_acc_file = os.path.join(result_dir, f"SCN_{setting.dataname}_trials.csv")
     
-    print(f"结果已保存到: {csv_path}")
+    # 创建每个trial的汇总数据
+    detailed_data = []
+    for trial_idx, trial in enumerate(idx_pick):
+        # 获取当前trial的最终训练准确度和最终测试准确度
+        final_train_acc = acc_train_list[-1, trial_idx] if len(acc_train_list) > 0 else 0
+        final_test_acc = acc_test_list[-1, trial_idx] if len(acc_test_list) > 0 else 0
+        
+        detailed_data.append({
+            'trial': trial_idx + 1,
+            'trial_idx': trial,
+            'test_accuracy': final_test_acc,
+            'train_accuracy': final_train_acc
+        })
     
-    # 不保存结果到CSV文件
-    # print(f"Results completed without CSV saving")
+    # 保存每个trial的汇总结果到CSV
+    if detailed_data:
+        detailed_df = pd.DataFrame(detailed_data)
+        detailed_df.to_csv(detailed_acc_file, index=False)
+        print(f"Trial results saved to: {detailed_acc_file}")
+    
+    # 保存汇总结果
+    result_file = os.path.join(result_dir, f"SCN_{setting.dataname}.csv")
+    results_df = pd.DataFrame({
+        'dataset': [setting.dataname],
+        'mean_accuracy': [m_acc],
+        'std_accuracy': [s_acc],
+        'trials': [len(acc_test)]
+    })
+    results_df.to_csv(result_file, index=False)
+    print(f"Summary results saved to: {result_file}")
 
 #     scio.savemat('result/' + setting.dataname + '_ours.mat', {'acc_test': acc_test, 'm_acc': m_acc, 's_acc': s_acc, 
 #                                              'acc_train_list': acc_train_list, 
